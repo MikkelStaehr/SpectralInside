@@ -1,0 +1,17 @@
+**/node_modules
+**/dist
+**/.venv
+**/__pycache__
+**/*.pyc
+
+backend/data
+frontend/tsconfig.tsbuildinfo
+
+.git
+.claude
+src/img
+src/training_guide
+
+.env
+.env.*
+!.env.example

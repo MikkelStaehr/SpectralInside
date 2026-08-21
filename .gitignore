@@ -1,0 +1,47 @@
+# Hemmeligheder. Skal aldrig i git, heller ikke den publicerbare noegle:
+# den hoerer til jeres projekt og har ingen grund til at ligge i historikken.
+.env
+.env.*
+!.env.example
+
+# Python
+backend/.venv/
+__pycache__/
+*.pyc
+
+# Lokal database. Beskeder og vedligeholdelseslog hører til den enkelte
+# installation og skal ikke i git.
+backend/data/
+
+# Node
+frontend/node_modules/
+frontend/dist/
+frontend/tsconfig.tsbuildinfo
+
+# Editor / OS
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Kildemateriale. Ligger lokalt, hoerer ikke i et offentligt kodearkiv:
+#
+#   src/training_guide/  Videometers egne manualer. Leverandoerens ophavsret,
+#                        ikke vores at dele.
+#   src/img/             UBS' logofiler, site-fotos og marketingmateriale.
+#
+# Applikationen laeser aldrig fra src/. Mappen er grundlaget, procedurerne og
+# videometerlab-skillen er skrevet ud fra, ikke en del af det der koerer.
+#
+# Skraastregen foran er ikke pynt. Uden den matcher moensteret i alle niveauer,
+# og saa ryger frontend/src/ med, altsaa hele React-koden.
+/src/
+
+# Videoer. Marketingmateriale paa flere hundrede megabyte stykket, og GitHub
+# afviser i forvejen filer over 100 MB.
+*.mp4
+
+# Lokale Claude-indstillinger og den leverandoerafledte skill. Indstillingerne
+# indeholder stier fra den enkelte maskine, og skillen er referater af
+# Videometers manualer.
+/.claude/

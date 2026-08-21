@@ -1,0 +1,51 @@
+# UBS Spectral Inside
+#
+#   docker compose up -d --build
+#
+# Kræver at de to VideometerLab-stier er sat i .env.local, se .env.example.
+# De monteres skrivebeskyttet: appen læser instrumentets filer og skriver
+# aldrig til dem.
+
+services:
+  app:
+    build: .
+    image: ubs-spectral-inside
+    restart: unless-stopped
+    ports:
+      - "${UBS_PORT:-8000}:8000"
+    env_file:
+      - .env.local
+    environment:
+      UBS_BLOBDB_DIR: /videometer/blobcollections
+      UBS_CLASSIFIERS_DIR: /videometer/classifiers
+    volumes:
+      # Procedurerne. Skrivebeskyttet, så en container ikke kan ændre
+      # indholdet, men en rettelse på værten slår igennem ved næste kald.
+      - ./content:/content:ro
+
+      # Beskeder, vedligeholdelseslog og dagens registreringer.
+      - ubs-data:/data
+
+      # VideometerLabs egne mapper. Skrivebeskyttet.
+      - ${UBS_HOST_BLOBDB_DIR:?saet UBS_HOST_BLOBDB_DIR i .env.local}:/videometer/blobcollections:ro
+      - ${UBS_HOST_CLASSIFIERS_DIR:?saet UBS_HOST_CLASSIFIERS_DIR i .env.local}:/videometer/classifiers:ro
+
+  # Skal appen svare på et navn frem for en port, sættes en reverse proxy
+  # foran. Caddy henter selv certifikat, hvis navnet ligger under et domæne,
+  # I ejer. Udkommentér og sæt navnet i .env.local.
+  #
+  # proxy:
+  #   image: caddy:2-alpine
+  #   restart: unless-stopped
+  #   ports:
+  #     - "80:80"
+  #     - "443:443"
+  #   command: caddy reverse-proxy --from ${UBS_HOSTNAME} --to app:8000
+  #   volumes:
+  #     - caddy-data:/data
+  #   depends_on:
+  #     - app
+
+volumes:
+  ubs-data:
+  # caddy-data:

@@ -1,0 +1,88 @@
+# Vedligeholdelsesopgaver med interval.
+#
+# interval_days: null betyder hændelsesstyret - opgaven har ingen forfaldsdato,
+# men skal udføres når en af betingelserne under "also_when" indtræffer.
+#
+# warn_days styrer, hvor mange dage før forfald opgaven begynder at melde sig
+# på arbejdsbordet. Indtil da ligger den stille under "de øvrige". Sæt den i
+# forhold til intervallet: en kvartalsopgave, der først varsler dagen før,
+# giver ingen mulighed for at nå at planlægge den.
+#
+# Kilder: VideometerLab Manual kap. 9, Autofeeder User and Maintenance Manual kap. 4.
+
+tasks:
+  - id: instrument-calibration
+    title: Instrumentkalibrering
+    interval_days: 7
+    warn_days: 2
+    procedure: instrumentkalibrering
+    why: >-
+      Kalibreringen er det, der gør målinger sammenlignelige over tid.
+      Uden en gyldig kalibrering måler instrumentet stadig, men resultatet
+      kan ikke holdes op mod tidligere uger.
+    also_when:
+      - Instrumentet er blevet flyttet
+      - Autofeederen er blevet monteret eller afmonteret
+      - Der er tvivl om kalibreringens gyldighed
+      - Max. StrobeTime er blevet ændret i Light Setup
+
+  - id: belt-cleaning
+    title: Rensning af transportbånd
+    interval_days: 7
+    warn_days: 2
+    procedure: rens-baandet
+    why: >-
+      Segmenteringen adskiller frøene fra baggrunden på båndets blå farve.
+      Et snavset bånd giver dårligere segmentering uden at melde fejl.
+    also_when:
+      - Frøene ser mærkelige ud i billederne
+      - Segmenteringen ser ikke korrekt ud
+
+  - id: feeder-plate
+    title: Rensning af fremføringsplade
+    interval_days: 30
+    warn_days: 5
+    procedure: null
+    why: >-
+      Fremføringspladen på vibratoren udsættes for frøstøv og olie, hvilket
+      ændrer friktionen over tid og dermed fremføringen.
+    also_when:
+      - Fremføringen er blevet ujævn uden anden forklaring
+
+  - id: camera-fov
+    title: Tjek af kameraets synsfelt
+    interval_days: 90
+    warn_days: 14
+    procedure: null
+    why: >-
+      Partikler og snavs kan samle sig inde i kameraets synsfelt og blokere
+      for nye partikler eller forringe billedkvaliteten.
+    note: >-
+      Dokumentationen modsiger sig selv: tabellen i Autofeeder-manualen siger
+      årligt, mens brødteksten i samme afsnit siger mindst fire gange om året.
+      Her er valgt kvartalsvis som det sikre.
+    also_when: []
+
+  - id: learn-belt
+    title: Learn Belt
+    interval_days: null
+    procedure: null
+    why: >-
+      Learn Belt måler, hvor skævt båndet sidder i forhold til kameraets
+      synsfelt. Værdien bruges, indtil den køres igen, og er global for
+      alle Autofeeder-produkter.
+    also_when:
+      - Båndenheden har været flyttet eller afmonteret
+      - Instrumentet har været flyttet
+      - Blobs ser systematisk skæve ud
+
+  - id: vibrator-position
+    title: Tjek af vibratorens position
+    interval_days: 30
+    warn_days: 5
+    procedure: null
+    why: >-
+      Rører vibratoren sideskinnerne på båndenheden, dæmpes vibrationen, og
+      fremføringen bliver ujævn. Positionen drifter langsomt af sig selv.
+    also_when:
+      - Fremføringen er svag eller ujævn

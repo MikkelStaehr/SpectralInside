@@ -1,0 +1,4 @@
+# Kun til udvikling og test. Køres ikke i drift.
+-r requirements.txt
+httpx2>=0.28
+pytest>=8.3

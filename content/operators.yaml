@@ -1,0 +1,29 @@
+# De analytikere, der bruger instrumentet.
+#
+# Er listen tom, beder login-siden om initialer som fritekst. Det virker, men
+# fritekst betyder, at den samme person over tid kan stå som "MSM", "msm" og
+# "Mikkel" i vedligeholdelsesloggen, og så kan man ikke længere se, hvem der
+# gjorde hvad.
+#
+# Skriv de fire ind her, så vælger man bare sig selv, og loggen bliver ens.
+# Eksempel:
+#
+# role styrer, om analysedelen vises i menuen. Standard er "analytiker".
+# Sæt "udvikler" på den, der bygger modeller. Det er oprydning, ikke
+# adgangskontrol: der er ingen indlogning, og intet er beskyttet.
+#
+# Er listen tom, vises analysedelen til alle, så den ikke er usynlig under
+# opsætningen.
+#
+# operators:
+#   - initials: MSM
+#     name: Mikkel Stæhr Madsen
+#     role: udvikler
+#   - initials: HE
+#     name: ...
+#   - initials: ML
+#     name: ...
+#   - initials: JTH
+#     name: ...
+
+operators: []
