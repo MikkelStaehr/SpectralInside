@@ -624,9 +624,14 @@ prøve 3 i Pre Cleaning". VideometerLabs eget sample-id er et referencefelt ved
 siden af og bliver aldrig operatørens nummer. Flere prøver pr. trin er det
 normale: man får et dårligt resultat, skruer på noget, og tager en ny prøve.
 
-**Justeringsteksten hører til prøven** og står på prøvevisningen sammen med
-resten af oplysningerne om den. Uden den er en forbedring bare et tal, der
-ændrede sig af sig selv, og så kan skærmen ikke svare på, hvad der hjalp.
+**Justeringsteksten gemmes på prøven, men vises ikke nogen steder.** Feltet
+`adjustment` sættes ved registreringen under Lots og ligger i databasen, men
+det er hverken på prøvevisningen eller i prøvehistorikken: som en kolonne med
+fri tekst brød det rytmen i en tabel, der ellers kun er tal.
+
+Det er værd at være opmærksom på. Uden den er en forbedring bare et tal, der
+ændrede sig af sig selv, og så kan skærmen ikke svare på, hvad der hjalp. Den
+skal have et sted at stå, hvis den skal kunne læses.
 
 Definitionen af processer, testtyper og metrikker står i
 [`backend/app/lots.py`](backend/app/lots.py) og kommer ud gennem

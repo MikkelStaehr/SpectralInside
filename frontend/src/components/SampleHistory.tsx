@@ -5,9 +5,10 @@
  * man står nu. Tabellen siger, om det er ved at blive bedre, og hvad der blev
  * gjort undervejs, og det spørgsmål skal kunne besvares med ét blik.
  *
- * Derfor står justeringen på samme række som det resultat, den frembragte, og
- * ikke i en kolonne for sig i den anden ende. Rækken læses som en sætning:
- * "vi skruede slibetrykket ned, og så faldt skaderne med 1,2".
+ * Justeringsteksten står ikke her. Kolonnen var det ene sted i tabellen med
+ * fri tekst, og den brød rytmen i en række, der ellers kun er tal. Bemærk at
+ * den dermed ikke vises nogen steder på operatørskærmen: den gemmes stadig på
+ * prøven, men den skal have et sted at stå, hvis den skal kunne læses.
  */
 
 import type { LotSample, TestType } from "../types";
@@ -76,7 +77,6 @@ export function SampleHistory({
                     {metric.label}
                   </th>
                 ))}
-                <th scope="col">Justering</th>
                 <th scope="col">Kvitteret</th>
               </tr>
             </thead>
@@ -148,12 +148,6 @@ export function SampleHistory({
                         </td>
                       );
                     })}
-
-                    <td className="history__adjustment">
-                      {sample.adjustment ?? (
-                        <span className="muted">ingen ændring</span>
-                      )}
-                    </td>
 
                     <td>
                       {sample.acknowledged_at ? (

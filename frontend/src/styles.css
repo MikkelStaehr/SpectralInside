@@ -3202,33 +3202,64 @@ p:last-child {
   overflow-x: auto;
 }
 
+/* Faste spalter. Uden dem maaler hver spalte sig efter sit bredeste indhold,
+   saa "Haaret Knopskulpe" bliver dobbelt saa bred som "Katost", og afstanden
+   mellem tallene skifter hen over raekken. Med fixed deler metrikkerne den
+   plads, der er tilbage, ligeligt. */
 .history__table {
   width: 100%;
   border-collapse: collapse;
+  table-layout: fixed;
 }
 
 .history__table th,
 .history__table td {
   text-align: left;
-  padding: 14px 14px 14px 0;
+  padding: 14px 18px 14px 0;
   border-top: 1px solid var(--border);
   vertical-align: top;
 }
 
+.history__table thead th:first-child {
+  width: 6rem;
+}
+
+.history__table thead th:nth-child(2) {
+  width: 11rem;
+}
+
+.history__table thead th:last-child {
+  width: 11rem;
+  padding-right: 0;
+}
+
+/* Overskrifterne bryder. Med faste spalter og nowrap flyder "Haaret
+   Knopskulpe" ud over sin nabo. Bundstillet, saa korte og lange navne staar
+   paa den samme linje forneden. */
 .history__table thead th {
   border-top: 0;
   border-bottom: 1px solid var(--border-strong);
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.04em;
   text-transform: uppercase;
   color: var(--text-muted);
-  white-space: nowrap;
+  white-space: normal;
+  vertical-align: bottom;
+  line-height: 1.3;
 }
 
 .history__table .num {
   text-align: right;
   white-space: nowrap;
+}
+
+/* Kun hovedet bryder. .num saetter nowrap og vinder paa specificitet over
+   reglen for thead th, saa den skal siges her for at "Haaret Knopskulpe" kan
+   falde ned i to linjer i stedet for ud over sin nabo. Tallene i raekkerne
+   bliver ved med at staa paa én linje. */
+.history__table thead th.num {
+  white-space: normal;
 }
 
 .history__table tbody th {
@@ -3256,11 +3287,6 @@ p:last-child {
 
 .history__row--new th:first-child {
   box-shadow: inset 3px 0 0 var(--danger-fg);
-}
-
-.history__adjustment {
-  font-size: 17px;
-  max-width: 34ch;
 }
 
 .history__acked {
