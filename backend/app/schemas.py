@@ -1,4 +1,4 @@
-"""API-kontrakter."""
+﻿"""API-kontrakter."""
 
 from __future__ import annotations
 
@@ -6,6 +6,8 @@ from datetime import date, datetime
 from typing import Literal
 
 from pydantic import BaseModel, Field
+
+from .lots import Process, ProcessId, StampId, TestType, TestTypeId
 
 MaintenanceState = Literal["ok", "due_soon", "overdue", "never", "event_driven"]
 
@@ -283,6 +285,183 @@ class ClassifierVersion(BaseModel):
     classes: list[str] = []
     size_bytes: int
     modified_at: datetime
+
+
+# --- Lots og prøver ---------------------------------------------------------
+#
+# Operatørskærmen i produktionen. Domænet, altså hvilke processer der findes,
+# hvilke testtyper der hører til hver af dem, og hvilke metrikker en testtype
+# har, står i lots.py og kommer ud gennem LotMeta. Frontenden gentager det
+# ikke.
+
+
+class LotMeta(BaseModel):
+    processes: list[Process] = []
+    test_types: list[TestType] = []
+    flat_threshold: float = Field(
+        description=(
+            "Absolut grænse for hvornår en ændring vises som uændret. Gælder "
+            "kun sammen med relative_threshold: begge skal være underskredet."
+        )
+    )
+    relative_threshold: float = Field(
+        description=(
+            "Relativ grænse, som andel af den foregående værdi. Uden den "
+            "rammer en fælles absolut grænse skævt, når metrikkerne ligger i "
+            "vidt forskellige størrelsesordener: 0,25 -> 0,20 er kun 0,05, "
+            "men en femtedel af værdien, og det er en rigtig ændring."
+        )
+    )
+
+
+class LotSample(BaseModel):
+    id: int
+    lot_no: str
+    process: ProcessId
+    test_type: TestTypeId
+    seq: int = Field(
+        description=(
+            "Operatørens prøvenummer, løbende inden for (lot, proces, "
+            "testtype). Ikke VideometerLabs id, det står i scan_id."
+        )
+    )
+    taken_at: datetime
+    taken_by: str | None = None
+    adjustment: str | None = Field(
+        default=None,
+        description=(
+            "Hvad der blev skruet på, før prøven blev taget. Uden den er en "
+            "forbedring bare et tal, der ændrede sig af sig selv."
+        ),
+    )
+    scan_id: str | None = Field(
+        default=None,
+        description="VideometerLabs egen reference. Åbner billedrækken, hvis den findes.",
+    )
+    acknowledged_at: datetime | None = None
+    acknowledged_by: str | None = None
+    metrics: dict[str, float] = {}
+
+
+class LotSummary(BaseModel):
+    lot_no: str
+    variety: str | None = None
+    item_no: str | None = None
+    line: str | None = None
+    started_at: datetime
+    started_by: str | None = None
+    stamp: StampId | None = None
+    stamped_at: datetime | None = None
+    stamped_by: str | None = None
+    stamp_note: str | None = None
+    sample_count: int = 0
+    unacknowledged_count: int = Field(
+        default=0,
+        description=(
+            "Resultater ingen har kvitteret for. Driver alarmen, også på de "
+            "lots der ikke er valgt, så et nyt resultat på et andet lot kan "
+            "ses fra strippen i bunden."
+        ),
+    )
+    last_sample_at: datetime | None = None
+    last_activity: datetime | None = Field(
+        default=None,
+        description=(
+            "Sidste gang der skete noget på lottet: en prøve, et stempel, en "
+            "opsætning, eller starten selv. Listen sorteres efter den, fordi "
+            "det lot, der lige har fået et resultat, er det nogen venter på."
+        ),
+    )
+
+
+class LotDetail(LotSummary):
+    samples: list[LotSample] = []
+
+
+class NewLot(BaseModel):
+    lot_no: str = Field(min_length=1, max_length=60)
+    variety: str | None = Field(default=None, max_length=120)
+    item_no: str | None = Field(default=None, max_length=60)
+    line: str | None = Field(default=None, max_length=60)
+    started_by: str | None = Field(default=None, max_length=80)
+
+
+class NewSample(BaseModel):
+    process: ProcessId
+    test_type: TestTypeId
+    metrics: dict[str, float] = Field(
+        description=(
+            "Metrik-id fra LotMeta til værdi. Ukendte navne afvises frem for "
+            "at blive gemt og aldrig vist."
+        )
+    )
+    taken_by: str | None = Field(default=None, max_length=80)
+    adjustment: str | None = Field(default=None, max_length=500)
+    scan_id: str | None = Field(default=None, max_length=200)
+    taken_at: datetime | None = Field(
+        default=None,
+        description="Tidspunktet prøven faktisk blev taget. Udeladt betyder nu.",
+    )
+
+
+# --- Opsætning af linjen ----------------------------------------------------
+#
+# Maskinerne fortæller ikke selv, hvordan de er sat op, så operatøren
+# registrerer det pr. lot. Hvilke indstillinger der findes, står i
+# content/machine-setup.yaml og kan rettes uden kodeændringer.
+
+
+class SetupSetting(BaseModel):
+    id: str
+    label: str
+    type: Literal["number", "text", "choice"] = "number"
+    unit: str | None = None
+    options: list[str] = []
+    hint: str | None = None
+
+
+class SetupGroup(BaseModel):
+    id: str
+    title: str
+    lead: str = ""
+    settings: list[SetupSetting] = []
+
+
+class SetupOptions(BaseModel):
+    groups: list[SetupGroup] = []
+
+
+class SetupValue(BaseModel):
+    setting_id: str
+    value: str
+
+
+class LotSetup(BaseModel):
+    lot_no: str
+    values: list[SetupValue] = []
+    set_at: datetime | None = None
+    set_by: str | None = None
+
+
+class SetupUpdate(BaseModel):
+    set_by: str = Field(min_length=1, max_length=80)
+    values: list[SetupValue] = Field(
+        description=(
+            "De indstillinger, operatøren har sat flueben ved, med deres "
+            "værdier. Erstatter hele opsætningen: fjerner man fluebenet, "
+            "forsvinder værdien, i stedet for at blive stående usynligt."
+        )
+    )
+
+
+class Acknowledgement(BaseModel):
+    acknowledged_by: str = Field(min_length=1, max_length=80)
+
+
+class LotStamp(BaseModel):
+    stamp: StampId
+    stamped_by: str = Field(min_length=1, max_length=80)
+    note: str | None = Field(default=None, max_length=500)
 
 
 class Health(BaseModel):

@@ -22,6 +22,7 @@ CONTENT_DIR = _path_from_env("UBS_CONTENT_DIR", REPO_ROOT / "content")
 PROCEDURES_DIR = CONTENT_DIR / "procedures"
 MAINTENANCE_FILE = CONTENT_DIR / "maintenance.yaml"
 OPERATORS_FILE = CONTENT_DIR / "operators.yaml"
+MACHINE_SETUP_FILE = CONTENT_DIR / "machine-setup.yaml"
 
 DB_PATH = _path_from_env("UBS_DB_PATH", BACKEND_DIR / "data" / "ubs.db")
 
@@ -123,3 +124,19 @@ CORS_ORIGINS = [
 
 # Hvor mange dage før forfald en opgave markeres som "snart".
 DUE_SOON_DAYS = int(os.environ.get("UBS_DUE_SOON_DAYS", "1"))
+
+# --- Operatørskærmen --------------------------------------------------------
+#
+# Skærmen i produktionen holdes frisk med server-sent events fra os selv, ikke
+# med Supabase realtime i browseren. Browseren har ingen nøgle til Supabase, og
+# tabellerne har RLS uden policies, så den vej er lukket med vilje.
+#
+# Intervallet er, hvor ofte serveren kigger efter, om der er sket noget. Et par
+# sekunder er rigeligt: en prøve tager minutter at tage, og forskellen mellem
+# 2 og 10 sekunder mærkes ikke af nogen, der står ved en maskine.
+LOT_STREAM_INTERVAL = float(os.environ.get("UBS_LOT_STREAM_INTERVAL", "3"))
+
+# Hjerteslag på strømmen. Uden det kan skærmen ikke skelne "der er ingen nye
+# prøver" fra "forbindelsen døde", og proxyer lukker stille en forbindelse,
+# der ikke siger noget.
+LOT_STREAM_HEARTBEAT = float(os.environ.get("UBS_LOT_STREAM_HEARTBEAT", "15"))

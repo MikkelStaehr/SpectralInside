@@ -5,8 +5,8 @@ import type {
   ConfusionMatrix,
   DailyStatus,
   Dashboard,
-  DisplaySample,
   Health,
+  LotSummary,
   MaintenanceStatus,
   Message,
   Operator,
@@ -22,6 +22,9 @@ import { MessagesView } from "./components/MessagesView";
 import { OperatorBadge } from "./components/OperatorBadge";
 import { StartupWizard } from "./components/StartupWizard";
 import { DisplayList, DisplaySampleView } from "./components/DisplayView";
+import { OperatorScreen } from "./components/OperatorScreen";
+import { SampleView } from "./components/SampleView";
+import { LotsView } from "./components/LotsView";
 import { ScansView } from "./components/ScansView";
 import { ScanView } from "./components/ScanView";
 import { AnalysisView } from "./components/AnalysisView";
@@ -38,17 +41,32 @@ type View =
   | { name: "scans" }
   | { name: "scan"; id: string }
   | { name: "analysis" }
+  | { name: "lots" }
   | { name: "display" }
+  | { name: "lotMonitor"; lotNo: string }
+  | { name: "lotSample"; sampleId: number }
   | { name: "displaySample"; id: string };
 
 const WIZARD_DISMISSED_KEY = "ubs.wizard.dismissed";
 
 function parseHash(hash: string): View {
   const path = hash.replace(/^#\/?/, "");
-  if (path.startsWith("visning/"))
+  // Billedrækken ligger under lottet i adressen, men er sin egen visning.
+  // Den skal derfor testes før den løsere lot-regel nedenunder.
+  if (path.startsWith("visning/scanning/"))
     return {
       name: "displaySample",
-      id: decodeURIComponent(path.slice("visning/".length)),
+      id: decodeURIComponent(path.slice("visning/scanning/".length)),
+    };
+  if (path.startsWith("visning/proeve/"))
+    return {
+      name: "lotSample",
+      sampleId: Number(path.slice("visning/proeve/".length)),
+    };
+  if (path.startsWith("visning/"))
+    return {
+      name: "lotMonitor",
+      lotNo: decodeURIComponent(path.slice("visning/".length)),
     };
   if (path === "visning") return { name: "display" };
   if (path.startsWith("procedure/"))
@@ -56,6 +74,7 @@ function parseHash(hash: string): View {
   if (path.startsWith("scanning/"))
     return { name: "scan", id: decodeURIComponent(path.slice("scanning/".length)) };
   if (path === "scanninger") return { name: "scans" };
+  if (path === "lots") return { name: "lots" };
   if (path === "wiki") return { name: "wiki" };
   if (path === "vedligehold") return { name: "maintenance" };
   if (path === "analyse") return { name: "analysis" };
@@ -66,7 +85,11 @@ function parseHash(hash: string): View {
 function toHash(view: View): string {
   switch (view.name) {
     case "displaySample":
-      return `#/visning/${encodeURIComponent(view.id)}`;
+      return `#/visning/scanning/${encodeURIComponent(view.id)}`;
+    case "lotMonitor":
+      return `#/visning/${encodeURIComponent(view.lotNo)}`;
+    case "lotSample":
+      return `#/visning/proeve/${view.sampleId}`;
     case "display":
       return "#/visning";
     case "procedure":
@@ -75,6 +98,8 @@ function toHash(view: View): string {
       return `#/scanning/${encodeURIComponent(view.id)}`;
     case "scans":
       return "#/scanninger";
+    case "lots":
+      return "#/lots";
     case "wiki":
       return "#/wiki";
     case "maintenance":
@@ -107,9 +132,7 @@ export default function App() {
   const [openScan, setOpenScan] = useState<ScanSummary | null>(null);
   const [classifiers, setClassifiers] = useState<ClassifierVersion[]>([]);
   const [confusion, setConfusion] = useState<ConfusionMatrix | null>(null);
-  const [displaySamples, setDisplaySamples] = useState<DisplaySample[] | null>(
-    null,
-  );
+  const [displayLots, setDisplayLots] = useState<LotSummary[] | null>(null);
 
   const [wizard, setWizard] = useState<Procedure | null>(null);
   const [wizardBusy, setWizardBusy] = useState(false);
@@ -131,12 +154,23 @@ export default function App() {
   }, []);
 
   // Operatørvisningen ligger foran login og henter uafhængigt af resten.
+  //
+  // Listen hentes forfra med jævne mellemrum. Den er landingssiden på en skærm,
+  // der står tændt hele dagen, og et nyt resultat, der lander mens nogen kigger
+  // på listen, skal kunne ses uden at nogen genindlæser siden. Selve monitoren
+  // har sin egen strøm, se lotStream.ts.
   useEffect(() => {
     if (parseHash(hash).name !== "display") return;
-    void api
-      .displaySamples()
-      .then(setDisplaySamples)
-      .catch(() => setDisplaySamples([]));
+
+    const load = () =>
+      void api
+        .lots()
+        .then(setDisplayLots)
+        .catch(() => setDisplayLots([]));
+
+    load();
+    const timer = window.setInterval(load, 15_000);
+    return () => window.clearInterval(timer);
   }, [hash]);
 
   const loadShared = useCallback(async () => {
@@ -202,6 +236,9 @@ export default function App() {
             break;
           }
           case "wiki":
+          // Lots-siden henter selv. Den skal ikke ind i det fælles kald,
+          // fordi den er den eneste visning, der både læser og skriver.
+          case "lots":
             await shared;
             break;
           default: {
@@ -307,8 +344,31 @@ export default function App() {
   if (view.name === "display") {
     return (
       <DisplayList
-        samples={displaySamples ?? []}
-        onOpen={(id) => navigate({ name: "displaySample", id })}
+        lots={displayLots ?? []}
+        onOpen={(lotNo) => navigate({ name: "lotMonitor", lotNo })}
+      />
+    );
+  }
+
+  if (view.name === "lotMonitor") {
+    return (
+      <OperatorScreen
+        lotNo={view.lotNo}
+        onBack={() => navigate({ name: "display" })}
+        onOpenSample={(sampleId) => navigate({ name: "lotSample", sampleId })}
+      />
+    );
+  }
+
+  if (view.name === "lotSample") {
+    return (
+      <SampleView
+        key={view.sampleId}
+        sampleId={view.sampleId}
+        // Tilbage til det lot, prøven hører til. Visningen kender lotnummeret
+        // først når den har hentet prøven, så browserens egen historik er den
+        // rigtige vej hjem.
+        onBack={() => window.history.back()}
       />
     );
   }
@@ -318,7 +378,10 @@ export default function App() {
       <DisplaySampleView
         key={view.id}
         scanId={view.id}
-        onBack={() => navigate({ name: "display" })}
+        // Tilbage til det lot, man kom fra. Visningen kender ikke lotnummeret,
+        // og den nås kun ved et klik derindefra, så browserens egen historik
+        // er den rigtige vej hjem.
+        onBack={() => window.history.back()}
       />
     );
   }
@@ -369,6 +432,15 @@ export default function App() {
           >
             <Icon name="scan-line" />
             Scanninger
+          </button>
+
+          <button
+            type="button"
+            className={navClass(view.name === "lots")}
+            onClick={() => navigate({ name: "lots" })}
+          >
+            <Icon name="badge-check" />
+            Lots
           </button>
 
           <button
@@ -485,6 +557,13 @@ export default function App() {
           ) : (
             !error && <p className="empty">Henter scanningen…</p>
           ))}
+
+        {!loading && view.name === "lots" && (
+          <LotsView
+            operator={operator}
+            onOpenMonitor={(lotNo) => navigate({ name: "lotMonitor", lotNo })}
+          />
+        )}
 
         {!loading && view.name === "analysis" && (
           <AnalysisView

@@ -14,7 +14,15 @@ import frontmatter
 import yaml
 
 from . import config
-from .schemas import MaintenanceTask, Operator, Procedure, ProcedureSummary, Step
+from .schemas import (
+    MaintenanceTask,
+    Operator,
+    Procedure,
+    ProcedureSummary,
+    SetupGroup,
+    SetupSetting,
+    Step,
+)
 
 # En procedure er opdelt i trin af H2-overskrifter. Alt før den første H2 er
 # indledning. Det holder forfatterformatet til ren Markdown.
@@ -181,6 +189,55 @@ def load_operators() -> list[Operator]:
     return operators
 
 
+def load_setup_options() -> list[SetupGroup]:
+    """Hvilke indstillinger operatøren kan registrere pr. lot.
+
+    Er filen der ikke, er listen tom, og Opsætning-knappen siger det frem for
+    at åbne en tom dialog. Det er en rimelig tilstand: applikationen skal virke
+    på en maskine, hvor ingen endnu har skrevet linjens indstillinger ned.
+    """
+    if not config.MACHINE_SETUP_FILE.is_file():
+        return []
+
+    try:
+        raw = yaml.safe_load(config.MACHINE_SETUP_FILE.read_text(encoding="utf-8")) or {}
+    except yaml.YAMLError as exc:
+        raise ContentError(f"machine-setup.yaml er ugyldig: {exc}") from exc
+
+    groups: list[SetupGroup] = []
+    for entry in raw.get("groups", []) or []:
+        settings: list[SetupSetting] = []
+        for item in entry.get("settings", []) or []:
+            kind = str(item.get("type") or "number").strip().lower()
+            if kind not in ("number", "text", "choice"):
+                kind = "number"
+            settings.append(
+                SetupSetting(
+                    id=str(item["id"]),
+                    label=str(item["label"]),
+                    type=kind,
+                    unit=str(item["unit"]) if item.get("unit") else None,
+                    options=[str(o) for o in (item.get("options") or [])],
+                    hint=str(item["hint"]).strip() if item.get("hint") else None,
+                )
+            )
+
+        groups.append(
+            SetupGroup(
+                id=str(entry["id"]),
+                title=str(entry["title"]),
+                lead=str(entry.get("lead") or "").strip(),
+                settings=settings,
+            )
+        )
+    return groups
+
+
+def setup_setting_ids() -> set[str]:
+    """Alle kendte indstillings-id'er, til validering af det, der gemmes."""
+    return {s.id for group in load_setup_options() for s in group.settings}
+
+
 def check() -> list[str]:
     """Fejl i indholdet på disk, til brug i /api/health."""
     problems: list[str] = []
@@ -217,5 +274,25 @@ def check() -> list[str]:
             problems.append(
                 f"Vedligeholdelsesopgaven '{task.id}' peger på ukendt procedure '{task.procedure}'"
             )
+
+    # Et dubleret indstillings-id ville betyde, at to felter skrev til den
+    # samme række i databasen, og at det ene overskrev det andet uden at nogen
+    # kunne se det på skærmen.
+    try:
+        groups = load_setup_options()
+    except ContentError as exc:
+        problems.append(str(exc))
+        return problems
+
+    setting_ids: set[str] = set()
+    for group in groups:
+        for setting in group.settings:
+            if setting.id in setting_ids:
+                problems.append(f"Dubleret indstillings-id '{setting.id}' i machine-setup.yaml")
+            setting_ids.add(setting.id)
+            if setting.type == "choice" and not setting.options:
+                problems.append(
+                    f"Indstillingen '{setting.id}' er en choice uden options"
+                )
 
     return problems

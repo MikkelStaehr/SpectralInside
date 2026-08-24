@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
-import type { DisplayDetail, DisplaySample } from "../types";
+import type { DisplayDetail, LotSummary } from "../types";
 import { Icon } from "./Icon";
 import { formatDate } from "../format";
 
@@ -10,16 +10,25 @@ import { formatDate } from "../format";
  * Ingen indlogning: at skulle taste initialer for at læse et tal er friktion
  * uden formål, og initialerne beskytter alligevel ingenting.
  *
- * Visningen kender ikke klassenavnet. Den spørger serveren, så skiftet fra
- * purity til skade sker ét sted i konfigurationen.
+ * Forsiden er listen over lots. Herfra går man ind i ét lot ad gangen, og
+ * derinde kan man skifte lot uden at komme tilbage hertil. Begge veje findes,
+ * fordi de bruges til hver sit: listen når man kommer til skærmen, strippen
+ * når man allerede står ved den.
  */
 
+const startedOn = new Intl.DateTimeFormat("da-DK", {
+  day: "numeric",
+  month: "short",
+  hour: "2-digit",
+  minute: "2-digit",
+});
+
 interface ListProps {
-  samples: DisplaySample[];
-  onOpen: (id: string) => void;
+  lots: LotSummary[];
+  onOpen: (lotNo: string) => void;
 }
 
-export function DisplayList({ samples, onOpen }: ListProps) {
+export function DisplayList({ lots, onOpen }: ListProps) {
   return (
     <div className="display">
       <header className="display__head">
@@ -30,27 +39,45 @@ export function DisplayList({ samples, onOpen }: ListProps) {
           alt=""
           aria-hidden="true"
         />
-        <h1>Prøveresultater</h1>
-        <p>Vælg din prøve.</p>
+        <h1>Lots</h1>
+        <p>Vælg det lot, du kører.</p>
       </header>
 
-      {samples.length === 0 ? (
-        <p className="empty">Ingen prøver endnu.</p>
+      {lots.length === 0 ? (
+        <p className="empty">Der er ikke startet noget lot endnu.</p>
       ) : (
         <ul className="display__samples">
-          {samples.map((s) => (
-            <li key={s.id}>
-              <button type="button" onClick={() => onOpen(s.id)}>
+          {lots.map((lot) => (
+            <li key={lot.lot_no}>
+              <button
+                type="button"
+                className={lot.unacknowledged_count > 0 ? "is-alerting" : undefined}
+                onClick={() => onOpen(lot.lot_no)}
+              >
                 <span className="display__sample-name">
-                  {s.sample ?? s.id}
+                  {/* Markeringen står også her. Et resultat, ingen har
+                      kvitteret for, skal kunne ses uden at gå ind i lottet. */}
+                  {lot.unacknowledged_count > 0 && (
+                    <span className="dot" aria-label="Nyt resultat" />
+                  )}
+                  {lot.lot_no}
                 </span>
                 <span className="display__sample-meta">
-                  {s.analyst ? `${s.analyst} · ` : ""}
-                  {s.scanned_on ? formatDate(s.scanned_on) : ""}
+                  {lot.variety ? `${lot.variety} · ` : ""}
+                  {lot.item_no ? `${lot.item_no} · ` : ""}
+                  {/* Hvornår der sidst skete noget, ikke hvornår lottet blev
+                      startet. Listen er sorteret efter det, og så skal den
+                      også vise det, ellers ser rækkefølgen tilfældig ud. */}
+                  senest{" "}
+                  {startedOn.format(
+                    new Date(lot.last_activity ?? lot.started_at),
+                  )}
+                  {lot.stamp === "approved" && " · godkendt"}
+                  {lot.stamp === "rejected" && " · afvist"}
                 </span>
                 <span className="display__sample-count">
-                  {s.focus_count}
-                  <span>fundet</span>
+                  {lot.sample_count}
+                  <span>prøver</span>
                 </span>
                 <Icon name="chevron-right" size={26} />
               </button>

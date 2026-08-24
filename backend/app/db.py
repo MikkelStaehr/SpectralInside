@@ -157,6 +157,112 @@ CREATE TABLE IF NOT EXISTS scan_blob_bands (
         REFERENCES scan_blobs (scan_id, blob_id) ON DELETE CASCADE
 );
 
+-- --- Lots og proever -------------------------------------------------------
+--
+-- Produktionslinjen, ikke instrumentet. Et lot kommer ind som en ordre, koeres
+-- gennem tre processer, og undervejs tages der proever. Analytikeren
+-- registrerer resultatet, og operatoerskaermen i produktionen laeser det.
+--
+-- Hierarkiet er stramt: lot -> proces -> testtype -> proevenummer -> metrikker.
+-- Definitionen af processer, testtyper og metrikker staar i lots.py og
+-- eksponeres gennem API'et, saa frontenden ikke gentager den.
+CREATE TABLE IF NOT EXISTS lots (
+    lot_no     TEXT PRIMARY KEY,
+    variety    TEXT,
+    -- Varenummeret paa sorten. Adskilt fra variety, fordi det er den noegle,
+    -- der bruges udenfor laboratoriet, og et navn kan skrives paa flere maader.
+    item_no    TEXT,
+    line       TEXT,
+    started_at TIMESTAMPTZ NOT NULL,
+    started_by TEXT,
+    -- Kvalitetsstemplet fra Post Cleaning. Saettes én gang, af et menneske.
+    stamp      TEXT CHECK (stamp IN ('approved', 'rejected')),
+    stamped_at TIMESTAMPTZ,
+    stamped_by TEXT,
+    stamp_note TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_lots_start ON lots (started_at DESC);
+
+-- CREATE TABLE IF NOT EXISTS tilfoejer ikke kolonner til en tabel, der findes
+-- i forvejen. Nye felter skal derfor staa som en ALTER her, saa en database,
+-- der blev lagt op foer feltet fandtes, ogsaa faar det.
+ALTER TABLE lots ADD COLUMN IF NOT EXISTS item_no TEXT;
+
+CREATE TABLE IF NOT EXISTS lot_samples (
+    id       BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    lot_no   TEXT NOT NULL REFERENCES lots (lot_no) ON DELETE CASCADE,
+    process  TEXT NOT NULL,
+    test_type TEXT NOT NULL,
+    -- Loebenummer inden for (lot, proces, testtype). Det er det tal,
+    -- operatoeren ser: "Purity, proeve 3". VideometerLabs egen id er en
+    -- reference, ikke et proevenummer, og staar i scan_id.
+    seq      INTEGER NOT NULL,
+    taken_at TIMESTAMPTZ NOT NULL,
+    taken_by TEXT,
+    -- Hvad der blev skruet paa, foer proeven blev taget. Uden den er en
+    -- forbedring bare et tal, der aendrede sig af sig selv.
+    adjustment TEXT,
+    -- VideometerLabs egen reference, altsaa filnavnets stem. Bruges til at
+    -- finde billedraekken. Er aldrig operatoerens proevenummer.
+    scan_id  TEXT,
+    acknowledged_at TIMESTAMPTZ,
+    acknowledged_by TEXT,
+    -- Hvilke testtyper der hoerer til hvilken proces er en domaeneregel, ikke
+    -- en praeference. Den staar ogsaa i lots.py, hvor den giver et brugbart
+    -- svar til den der taster forkert. Her staar den, fordi den skal gaelde
+    -- ogsaa for den der skriver udenom API'et.
+    CONSTRAINT lot_samples_scope CHECK (
+        (process = 'pre_cleaning'  AND test_type = 'purity')
+        OR (process = 'cleaning'     AND test_type = 'cleaning_damage')
+        OR (process = 'post_cleaning' AND test_type IN ('purity', 'cleaning_damage'))
+    )
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_lot_samples_seq
+    ON lot_samples (lot_no, process, test_type, seq);
+
+CREATE INDEX IF NOT EXISTS idx_lot_samples_scope
+    ON lot_samples (lot_no, process, test_type, seq DESC);
+
+CREATE TABLE IF NOT EXISTS lot_sample_metrics (
+    sample_id BIGINT NOT NULL REFERENCES lot_samples (id) ON DELETE CASCADE,
+    metric    TEXT NOT NULL,
+    value     DOUBLE PRECISION NOT NULL,
+    PRIMARY KEY (sample_id, metric)
+);
+
+-- Opsaetningen af linjen, som operatoeren registrerer pr. lot. Maskinerne
+-- fortaeller ikke selv, hvordan de er sat op, saa uden det her kan man ikke
+-- bagefter se, hvilke indstillinger der gav hvilke tal.
+--
+-- En raekke betyder "operatoeren satte flueben ved denne indstilling". Fjernes
+-- fluebenet, slettes raekken, saa en vaerdi ikke kan blive staaende usynligt
+-- og dukke op igen senere.
+--
+-- Vaerdien er TEXT, ogsaa for tal. Hvilke indstillinger der findes, staar i
+-- content/machine-setup.yaml og kan aendres uden en migrering, og en kolonne
+-- med en type ville binde databasen til en fil, nogen retter i en fredag.
+CREATE TABLE IF NOT EXISTS lot_setup (
+    lot_no     TEXT NOT NULL REFERENCES lots (lot_no) ON DELETE CASCADE,
+    setting_id TEXT NOT NULL,
+    value      TEXT NOT NULL,
+    set_at     TIMESTAMPTZ NOT NULL,
+    set_by     TEXT NOT NULL,
+    PRIMARY KEY (lot_no, setting_id)
+);
+
+-- Spec-graenser. Ubrugt i denne version: der er ingen OK/ikke-OK-domme paa
+-- skaermen endnu. Tabellen findes, saa den dag de kommer, er det en
+-- visningsaendring og ikke en migrering midt i en hoestsaeson.
+CREATE TABLE IF NOT EXISTS spec_limits (
+    test_type   TEXT NOT NULL,
+    metric      TEXT NOT NULL,
+    lower_limit DOUBLE PRECISION,
+    upper_limit DOUBLE PRECISION,
+    PRIMARY KEY (test_type, metric)
+);
+
 -- Row Level Security uden en eneste policy lukker tabellerne for Supabases
 -- REST-API. Vi forbinder som ejer gennem pooleren og rammes ikke af det, men
 -- en publicerbar nogle kan sa ikke lase en vedligeholdelseslog ud af
@@ -169,6 +275,11 @@ ALTER TABLE scans           ENABLE ROW LEVEL SECURITY;
 ALTER TABLE scan_classes    ENABLE ROW LEVEL SECURITY;
 ALTER TABLE scan_blobs      ENABLE ROW LEVEL SECURITY;
 ALTER TABLE scan_blob_bands ENABLE ROW LEVEL SECURITY;
+ALTER TABLE lots               ENABLE ROW LEVEL SECURITY;
+ALTER TABLE lot_samples        ENABLE ROW LEVEL SECURITY;
+ALTER TABLE lot_sample_metrics ENABLE ROW LEVEL SECURITY;
+ALTER TABLE spec_limits        ENABLE ROW LEVEL SECURITY;
+ALTER TABLE lot_setup          ENABLE ROW LEVEL SECURITY;
 """
 
 
@@ -657,3 +768,307 @@ def confusion(scan_id: str | None = None) -> list[tuple[str, str, int]]:
 
     rows = _run(lambda conn: conn.execute(sql, params).fetchall())
     return [(r["reference"], r["predicted"], r["n"]) for r in rows]
+
+
+# --- Lots og prøver ---------------------------------------------------------
+#
+# Skrevet af analytikeren, læst af operatørskærmen i produktionen.
+
+
+def list_lots(limit: int = 40) -> list[Row]:
+    """Alle lots med det, forsiden skal bruge.
+
+    Antal prøver og antallet af ukvitterede tælles med i samme forespørgsel.
+    Alternativet er ét kald pr. lot, og forsiden viser dem alle sammen.
+
+    **Sorteret efter hvornår der sidst skete noget**, ikke efter hvornår lottet
+    blev startet. Det lot, der lige har fået en prøve, er det, nogen står og
+    venter på, og det skal ligge øverst. Et lot startet i går, som stadig
+    kører, må ikke ligge over et, der fik et resultat for to minutter siden.
+
+    Kvitteringer tæller ikke med. De er nogens svar på et resultat og ikke en
+    ændring af det, og listen skal ikke hoppe rundt, hver gang en operatør
+    trykker "kvittér".
+    """
+    return _run(
+        lambda conn: conn.execute(
+            """
+            SELECT l.*,
+                   COALESCE(s.samples, 0) AS sample_count,
+                   COALESCE(s.unacked, 0) AS unacknowledged_count,
+                   s.last_sample_at,
+                   GREATEST(
+                       l.started_at,
+                       COALESCE(s.last_sample_at, l.started_at),
+                       COALESCE(l.stamped_at,     l.started_at),
+                       COALESCE(u.last_setup_at,  l.started_at)
+                   ) AS last_activity
+            FROM lots l
+            LEFT JOIN (
+                SELECT lot_no,
+                       COUNT(*)                                        AS samples,
+                       COUNT(*) FILTER (WHERE acknowledged_at IS NULL) AS unacked,
+                       MAX(taken_at)                                   AS last_sample_at
+                FROM lot_samples
+                GROUP BY lot_no
+            ) s ON s.lot_no = l.lot_no
+            LEFT JOIN (
+                SELECT lot_no, MAX(set_at) AS last_setup_at
+                FROM lot_setup
+                GROUP BY lot_no
+            ) u ON u.lot_no = l.lot_no
+            ORDER BY last_activity DESC
+            LIMIT %s
+            """,
+            (limit,),
+        ).fetchall()
+    )
+
+
+def get_lot(lot_no: str) -> Row | None:
+    return _run(
+        lambda conn: conn.execute(
+            "SELECT * FROM lots WHERE lot_no = %s", (lot_no,)
+        ).fetchone()
+    )
+
+
+def add_lot(
+    lot_no: str,
+    variety: str | None,
+    item_no: str | None,
+    line: str | None,
+    started_by: str | None,
+    started_at: datetime | None = None,
+) -> Row:
+    return _run(
+        lambda conn: conn.execute(
+            "INSERT INTO lots (lot_no, variety, item_no, line, started_at, started_by) "
+            "VALUES (%s, %s, %s, %s, %s, %s) RETURNING *",
+            (
+                lot_no.strip(),
+                (variety or "").strip() or None,
+                (item_no or "").strip() or None,
+                (line or "").strip() or None,
+                started_at or now(),
+                (started_by or "").strip() or None,
+            ),
+        ).fetchone()
+    )
+
+
+def stamp_lot(lot_no: str, stamp: str, stamped_by: str, note: str | None) -> Row | None:
+    """Sæt kvalitetsstemplet. Kun én gang.
+
+    ``stamp IS NULL`` i WHERE er det, der gør det. Uden den kunne to
+    operatører, der trykker samtidig, ende med at den ene overskriver den
+    andens afvisning med en godkendelse.
+    """
+    return _run(
+        lambda conn: conn.execute(
+            "UPDATE lots SET stamp = %s, stamped_at = %s, stamped_by = %s, "
+            "stamp_note = %s WHERE lot_no = %s AND stamp IS NULL RETURNING *",
+            (stamp, now(), stamped_by.strip(), (note or "").strip() or None, lot_no),
+        ).fetchone()
+    )
+
+
+def lot_samples(lot_no: str) -> list[Row]:
+    """Alle prøver på ét lot, med metrikkerne samlet i én kolonne.
+
+    Metrikkerne kommer med som JSON frem for som en række pr. metrik. Skærmen
+    skal bruge dem alle sammen alligevel, og et lot med 20 prøver ville ellers
+    give 120 rækker, der skulle syes sammen igen i Python.
+    """
+    return _run(
+        lambda conn: conn.execute(
+            """
+            SELECT s.*,
+                   COALESCE(
+                       (SELECT jsonb_object_agg(m.metric, m.value)
+                        FROM lot_sample_metrics m
+                        WHERE m.sample_id = s.id),
+                       '{}'::jsonb
+                   ) AS metrics
+            FROM lot_samples s
+            WHERE s.lot_no = %s
+            ORDER BY s.process, s.test_type, s.seq
+            """,
+            (lot_no,),
+        ).fetchall()
+    )
+
+
+def get_sample(sample_id: int) -> Row | None:
+    """Én prøve med sine metrikker, i samme form som lot_samples giver dem."""
+    return _run(
+        lambda conn: conn.execute(
+            """
+            SELECT s.*,
+                   COALESCE(
+                       (SELECT jsonb_object_agg(m.metric, m.value)
+                        FROM lot_sample_metrics m
+                        WHERE m.sample_id = s.id),
+                       '{}'::jsonb
+                   ) AS metrics
+            FROM lot_samples s
+            WHERE s.id = %s
+            """,
+            (sample_id,),
+        ).fetchone()
+    )
+
+
+def add_sample(
+    lot_no: str,
+    process: str,
+    test_type: str,
+    metrics: dict[str, float],
+    taken_by: str | None,
+    adjustment: str | None,
+    scan_id: str | None,
+    taken_at: datetime | None = None,
+) -> Row:
+    """Registrér én prøve med sine metrikker, i én transaktion.
+
+    Løbenummeret tildeles her og ikke af den, der taster. To analytikere, der
+    registrerer på det samme lot samtidig, ville ellers kunne give den samme
+    prøve nummer 3 begge to. ``FOR UPDATE`` på lottet serialiserer dem, og det
+    unikke indeks på (lot, proces, testtype, seq) fanger resten.
+    """
+
+    def work(conn: psycopg.Connection) -> Row:
+        conn.execute("SELECT 1 FROM lots WHERE lot_no = %s FOR UPDATE", (lot_no,))
+        row = conn.execute(
+            "SELECT COALESCE(MAX(seq), 0) + 1 AS seq FROM lot_samples "
+            "WHERE lot_no = %s AND process = %s AND test_type = %s",
+            (lot_no, process, test_type),
+        ).fetchone()
+        seq = row["seq"]
+
+        sample = conn.execute(
+            """
+            INSERT INTO lot_samples
+                (lot_no, process, test_type, seq, taken_at, taken_by,
+                 adjustment, scan_id)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            RETURNING *
+            """,
+            (
+                lot_no,
+                process,
+                test_type,
+                seq,
+                taken_at or now(),
+                (taken_by or "").strip() or None,
+                (adjustment or "").strip() or None,
+                (scan_id or "").strip() or None,
+            ),
+        ).fetchone()
+
+        if metrics:
+            with conn.cursor() as cur:
+                cur.executemany(
+                    "INSERT INTO lot_sample_metrics (sample_id, metric, value) "
+                    "VALUES (%s, %s, %s)",
+                    [(sample["id"], name, value) for name, value in metrics.items()],
+                )
+
+        return sample
+
+    return _run(work)
+
+
+def acknowledge_sample(sample_id: int, acknowledged_by: str) -> Row | None:
+    """Kvittér for et resultat.
+
+    ``acknowledged_at IS NULL`` i WHERE gør den idempotent: den, der kvitterede
+    først, står som den, der så resultatet. Et andet klik flytter ikke navnet.
+    """
+    return _run(
+        lambda conn: conn.execute(
+            "UPDATE lot_samples SET acknowledged_at = %s, acknowledged_by = %s "
+            "WHERE id = %s AND acknowledged_at IS NULL RETURNING *",
+            (now(), acknowledged_by.strip(), sample_id),
+        ).fetchone()
+    )
+
+
+def lot_setup(lot_no: str) -> list[Row]:
+    return _run(
+        lambda conn: conn.execute(
+            "SELECT * FROM lot_setup WHERE lot_no = %s ORDER BY setting_id",
+            (lot_no,),
+        ).fetchall()
+    )
+
+
+def save_lot_setup(
+    lot_no: str, values: list[tuple[str, str]], set_by: str
+) -> list[Row]:
+    """Erstat hele opsætningen for ét lot, i én transaktion.
+
+    Erstatning og ikke fletning. Fjerner operatøren et flueben, skal værdien
+    forsvinde, ikke blive stående usynligt og dukke op igen næste gang nogen
+    åbner dialogen.
+    """
+
+    def work(conn: psycopg.Connection) -> list[Row]:
+        conn.execute("DELETE FROM lot_setup WHERE lot_no = %s", (lot_no,))
+        if values:
+            stamp = now()
+            with conn.cursor() as cur:
+                cur.executemany(
+                    "INSERT INTO lot_setup (lot_no, setting_id, value, set_at, set_by) "
+                    "VALUES (%s, %s, %s, %s, %s)",
+                    [
+                        (lot_no, setting_id, value, stamp, set_by.strip())
+                        for setting_id, value in values
+                    ],
+                )
+        return conn.execute(
+            "SELECT * FROM lot_setup WHERE lot_no = %s ORDER BY setting_id",
+            (lot_no,),
+        ).fetchall()
+
+    return _run(work)
+
+
+def spec_limits() -> list[Row]:
+    """Spec-grænserne. Ubrugt i denne version, se skemaet."""
+    return _run(lambda conn: conn.execute("SELECT * FROM spec_limits").fetchall())
+
+
+def lots_change_token() -> str:
+    """Et tal, der ændrer sig, præcis når skærmen har noget nyt at vise.
+
+    Grundlaget under SSE-strømmen. Billigere end at hente alle lots og
+    sammenligne dem, og det er den forespørgsel, der køres hvert par sekunder,
+    så længe der står en skærm tændt i produktionen.
+    """
+    row = _run(
+        lambda conn: conn.execute(
+            """
+            SELECT
+                (SELECT COUNT(*) FROM lot_samples) AS samples,
+                (SELECT MAX(GREATEST(taken_at, COALESCE(acknowledged_at, taken_at)))
+                 FROM lot_samples) AS touched,
+                (SELECT COUNT(*) FROM lots) AS lots,
+                (SELECT MAX(GREATEST(started_at, COALESCE(stamped_at, started_at)))
+                 FROM lots) AS lots_touched,
+                (SELECT COUNT(*) FROM lot_setup) AS setup,
+                (SELECT MAX(set_at) FROM lot_setup) AS setup_touched
+            """
+        ).fetchone()
+    )
+    return "|".join(
+        str(row[key])
+        for key in (
+            "samples",
+            "touched",
+            "lots",
+            "lots_touched",
+            "setup",
+            "setup_touched",
+        )
+    )

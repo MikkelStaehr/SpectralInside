@@ -1,0 +1,109 @@
+# Opsætning af linjen, som operatøren registrerer pr. lot.
+#
+# Maskinerne fortæller ikke selv, hvordan de er sat op, og derfor gør
+# operatøren det. Formålet er ikke dokumentation for dokumentationens skyld:
+# uden opsætningen kan man ikke bagefter se, hvilke indstillinger der gav
+# hvilke tal, og så er en god prøve bare heldig.
+#
+# Filen ligger i git, fordi den styrer hvad der bliver spurgt om. Ret den her,
+# genindlæs siden, så er ændringen der. Ingen genstart.
+#
+# ADVARSEL: listen herunder er et udgangspunkt, ikke jeres virkelighed. Den er
+# skrevet ud fra hvad en renselinje til roefrø typisk har, og skal gennemgås
+# med en, der står ved maskinerne. Slet det, I ikke har, ret enhederne, og
+# tilføj det, der mangler. Indtil da gætter operatørerne, og så er
+# registreringen mere skadelig end ingen registrering.
+#
+# Felter pr. indstilling:
+#   id       unikt inden for hele filen, bruges som nøgle i databasen
+#   label    det operatøren læser
+#   type     number, text eller choice
+#   unit     vises efter feltet, valgfri
+#   options  kun for choice
+#   hint     kort forklaring under feltet, valgfri
+
+groups:
+  - id: pre_cleaning
+    title: Pre Cleaning
+    lead: Sortering. Grene, sten og ler tages fra.
+    settings:
+      - id: pre_sold_ovre
+        label: Sold, øvre
+        type: number
+        unit: mm
+      - id: pre_sold_nedre
+        label: Sold, nedre
+        type: number
+        unit: mm
+      - id: pre_sigteafstand
+        label: Sigteafstand
+        type: number
+        unit: mm
+      - id: pre_luftstroem
+        label: Luftstrøm
+        type: number
+        unit: "%"
+      - id: pre_tilfoersel
+        label: Tilførselshastighed
+        type: number
+        unit: kg/t
+
+  - id: cleaning
+    title: Cleaning
+    lead: Slibning. Korken tages af frøet.
+    settings:
+      - id: cln_slibetryk
+        label: Slibetryk
+        type: number
+        unit: bar
+      - id: cln_slibetid
+        label: Slibetid
+        type: number
+        unit: s
+      - id: cln_omdrejninger
+        label: Omdrejninger
+        type: number
+        unit: o/min
+      - id: cln_slibeskive
+        label: Slibeskive
+        type: choice
+        options: [Grov, Mellem, Fin]
+        hint: Skal udfyldes med jeres faktiske typebetegnelser
+
+  - id: post_cleaning
+    title: Post Cleaning
+    lead: Endelig kvalitetskontrol.
+    settings:
+      - id: post_sigteafstand
+        label: Sigteafstand
+        type: number
+        unit: mm
+      - id: post_luftstroem
+        label: Luftstrøm
+        type: number
+        unit: "%"
+
+  # De fire herunder svarer til de [!UDFYLD]-blokke, der stadig står åbne i
+  # procedurerne. Registreres de pr. lot, kan man bagefter se, om to lots blev
+  # målt ens, og det er hele grunden til at applikationen findes.
+  - id: analyse
+    title: Analyse
+    lead: VideometerLab og Autofeeder.
+    settings:
+      - id: vm_recept
+        label: Recept
+        type: text
+        hint: Navnet præcis som det står i VideometerLab
+      - id: vm_spacer
+        label: Spacer
+        type: text
+        hint: Hvilken bruges til roefrø
+      - id: vm_drift_correction
+        label: Drift correction
+        type: choice
+        options: [Til, Fra]
+        hint: Skal være den samme hver gang
+      - id: vm_klassifikator
+        label: Klassifikator
+        type: text
+        hint: Modelnavn og version

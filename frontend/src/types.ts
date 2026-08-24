@@ -1,4 +1,4 @@
-export interface Step {
+﻿export interface Step {
   index: number;
   title: string;
   body: string;
@@ -184,6 +184,121 @@ export interface ConfusionMatrix {
   correct: number;
   scans_included: number;
   note: string;
+}
+
+// --- Lots og prøver --------------------------------------------------------
+//
+// Operatørskærmen i produktionen. Bemærk at hverken processernes rækkefølge,
+// metrikkernes navne eller hvilken vej der er den gode står her: det kommer
+// fra /api/lots/meta, så det kun findes ét sted.
+
+export type ProcessId = "pre_cleaning" | "cleaning" | "post_cleaning";
+export type TestTypeId = "purity" | "cleaning_damage";
+export type StampId = "approved" | "rejected";
+
+export interface Metric {
+  id: string;
+  label: string;
+  unit: string;
+  primary: boolean;
+  better: "higher" | "lower";
+  /** Klassens navn i VideometerLabs egen model. Null for metrikker uden klasse. */
+  source_class: string | null;
+}
+
+// Opsætningen af linjen. Hvilke indstillinger der findes, kommer fra
+// content/machine-setup.yaml gennem serveren, så listen kan rettes uden
+// en kodeændring.
+
+export interface SetupSetting {
+  id: string;
+  label: string;
+  type: "number" | "text" | "choice";
+  unit: string | null;
+  options: string[];
+  hint: string | null;
+}
+
+export interface SetupGroup {
+  id: string;
+  title: string;
+  lead: string;
+  settings: SetupSetting[];
+}
+
+export interface SetupOptions {
+  groups: SetupGroup[];
+}
+
+export interface SetupValue {
+  setting_id: string;
+  value: string;
+}
+
+export interface LotSetup {
+  lot_no: string;
+  values: SetupValue[];
+  set_at: string | null;
+  set_by: string | null;
+}
+
+export interface TestType {
+  id: TestTypeId;
+  label: string;
+  metrics: Metric[];
+}
+
+export interface Process {
+  id: ProcessId;
+  step: number;
+  label: string;
+  test_types: TestTypeId[];
+  stamp: boolean;
+}
+
+export interface LotMeta {
+  processes: Process[];
+  test_types: TestType[];
+  flat_threshold: number;
+  relative_threshold: number;
+}
+
+export interface LotSample {
+  id: number;
+  lot_no: string;
+  process: ProcessId;
+  test_type: TestTypeId;
+  seq: number;
+  taken_at: string;
+  taken_by: string | null;
+  adjustment: string | null;
+  scan_id: string | null;
+  acknowledged_at: string | null;
+  acknowledged_by: string | null;
+  metrics: Record<string, number>;
+}
+
+export interface LotSummary {
+  lot_no: string;
+  variety: string | null;
+  /** Varenummeret paa sorten. Noeglen der bruges uden for laboratoriet. */
+  item_no: string | null;
+  line: string | null;
+  started_at: string;
+  started_by: string | null;
+  stamp: StampId | null;
+  stamped_at: string | null;
+  stamped_by: string | null;
+  stamp_note: string | null;
+  sample_count: number;
+  unacknowledged_count: number;
+  last_sample_at: string | null;
+  /** Sidst der skete noget: en prøve, et stempel, en opsætning, eller starten. */
+  last_activity: string | null;
+}
+
+export interface LotDetail extends LotSummary {
+  samples: LotSample[];
 }
 
 export interface Health {

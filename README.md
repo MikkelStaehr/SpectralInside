@@ -178,13 +178,32 @@ til et bestemt sted.
 | --- | --- |
 | `#/` | Arbejdsbordet |
 | `#/procedure/koer-et-lot` | En arbejdsgang, med `id` fra dens frontmatter |
+| `#/lots` | Lots. Start et lot, registrér prøver |
 | `#/beskeder` | Beskeder |
+| `#/visning` | Lot-listen i produktionen. Uden login |
+| `#/visning/<lotnr>` | Operatørskærmen for ét lot |
+| `#/visning/proeve/<id>` | Én prøve med metrikker og billeder, sidste led |
+| `#/visning/scanning/<id>` | Frøbillederne fra én scanning |
 
 ## Design
 
 Retningen kommer fra moodboardet i `src/img/moodboard/`: varm neutral kanvas i
-stedet for kold grå, fast sidebar, hvide kort med hårfine kanter, næsten
+stedet for kold grå, fast sidebar, hvide flader med hårfine kanter, næsten
 monokromt med én accent, og store klare tal frem for informationstæthed.
+
+**Fladt, skarpt og roligt.** Fire regler, som `styles.css` retter sig efter:
+
+| Regel | Hvad det betyder |
+| --- | --- |
+| Skarpe kanter | `--radius` er `0`. Runding findes kun, hvor formen **er** rund: prikker og punkter i grafer, og hætterne på hårfine stregmarkeringer. Aldrig på en kasse |
+| Flade flader | `--shadow` er `none`. Dybde kommer af en 1 px linje, ikke af en skygge. Også dialogen |
+| Fire vægte | 400 brødtekst, 500 dæmpede etiketter, 600 tal og overskrifter, 700 kun det største |
+| Ti størrelser | 12 13 15 17 21 27 34 46 56 76 |
+
+De to sidste er ikke kosmetik. Filen havde **tretten fontvægte og toogtredive
+størrelser**, og det er den egentlige grund til, at typografien ikke matchede
+sig selv. Brødteksten er 17 px, og ingen værdi, operatøren skal læse på tre
+meters afstand, går under den.
 
 Farverne er hentet direkte ud af UBS' logofiler i `src/img/`:
 
@@ -284,6 +303,10 @@ der faktisk bruges, med i bundtet. Ukendte navne falder tilbage til et
 dokumentikon i stedet for at knække visningen.
 
 ### Vedligeholdelse
+
+Linjens indstillinger defineres i
+[`content/machine-setup.yaml`](content/machine-setup.yaml), se Opsætning af
+linjen.
 
 Opgaver med interval defineres i [`content/maintenance.yaml`](content/maintenance.yaml).
 `interval_days: null` betyder hændelsesstyret, opgaven har ingen forfaldsdato,
@@ -400,7 +423,7 @@ skadede frø.
 Alle klasser i data handler om **hvilken art** et frø er, ikke om dets tilstand:
 
 `Sugarbeet` · `Foreign` · `Unknown` · `Natskygge` · `Koriander` · `Katost` ·
-`Håret Knopskulpe` · `Agersnerle` · `Pileurt`
+`Håret Knopskulpe` · `Agersnerle` · `Pileurt` · `Burresnerre`
 
 Purity-modellen svarer på "er det her et roefrø eller ukrudt". Målet kræver en
 model, der svarer på "er dette roefrø helt eller skadet". Videometers egen
@@ -426,8 +449,9 @@ Intet andet skal ændres.
 | **Wiki** | Analytikerne | Guides. Hvordan man gør |
 | **Vedligehold** | Analytikerne | Hvornår noget skal gøres, og fremgangsmåderne der hører til |
 | **Beskeder** | Analytikerne | Historik |
+| **Lots** | Analytikerne | Start et lot, registrér prøver undervejs |
 | **Modeller og materiale** | Udvikleren | Modelversioner, træningshuller, rettelsesmønster |
-| **Visning** (`#/visning`) | Produktionen | Stamdata og billedrække. Uden login |
+| **Visning** (`#/visning`) | Produktionen | Lots, prøveresultater og billedrække. Uden login |
 
 **Wiki og vedligehold er skilt ad med vilje.** Wikien fortæller *hvordan* man
 gør. Vedligehold fortæller *hvornår* noget skal gøres, og linker til wikien for
@@ -524,6 +548,345 @@ referenceklasse, tæller med, og operatørerne retter fortrinsvis det, modellen
 tog fejl af. Tallene viser hvor rettelserne falder, ikke hvor ofte modellen
 rammer rigtigt. Det står også på skærmen, så ingen læser dem som noget andet.
 
+## Operatørskærmen
+
+Produktionslinjen, ikke instrumentet. Et lot kommer ind som en ordre, køres
+gennem tre processer, og undervejs tages der prøver. Analytikeren registrerer
+resultatet under **Lots**, og skærmen på produktionsgangen læser det.
+
+Hierarkiet er stramt og fire niveauer dybt:
+
+```text
+Lotnummer -> proces -> testtype -> prøvenummer -> metrikker
+```
+
+Et lot bærer **Varietet** og **Item no.** hver for sig. Varieteten er navnet,
+item-nummeret er den nøgle, der bruges uden for laboratoriet, og et navn kan
+skrives på flere måder. `item_no` kom til efter tabellen fandtes og står derfor
+som en `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` i skemaet:
+`CREATE TABLE IF NOT EXISTS` tilføjer ikke kolonner til en tabel, der allerede
+er der.
+
+| Proces | Testtyper |
+| --- | --- |
+| Pre Cleaning | Purity |
+| Cleaning | Cleaning Damage |
+| Post Cleaning | **begge** |
+
+**Purity giver tal for purity-modellens ti klasser**, ikke for en opfundet
+liste over urenheder:
+
+`Sugarbeet` · `Foreign` · `Unknown` · `Natskygge` · `Koriander` · `Katost` ·
+`Håret Knopskulpe` · `Agersnerle` · `Pileurt` · `Burresnerre`
+
+Sugarbeet er selve renheden og skal op. Alt andet er iblanding og skal ned,
+Unknown indbefattet: den er ikke en urenhed, men de frø modellen ikke kunne
+afgøre, og udelader man den, summer tallene ikke til 100.
+
+Hver metrik bærer sit `source_class`, altså klassens navn stavet præcis som i
+VideometerLab. Metrik-id'et er en slug, fordi det skal kunne stå i en URL og en
+databasekolonne, men connectoren skal kunne finde klassen igen uden at gætte på
+stavemåden.
+
+Cleaning Damage måler Skader i alt, Red Eyes, White Eyes, Naked Embryo og
+Decapped, alle lavere er bedre. **Den model findes ikke endnu**, så de fem er
+et udgangspunkt og skal gennemgås, når klassen er trænet.
+
+**Prøvenummeret er løbende inden for (lot, proces, testtype)**, altså "Purity,
+prøve 3 i Pre Cleaning". VideometerLabs eget sample-id er et referencefelt ved
+siden af og bliver aldrig operatørens nummer. Flere prøver pr. trin er det
+normale: man får et dårligt resultat, skruer på noget, og tager en ny prøve.
+
+**Justeringsteksten hører til prøven** og står på prøvevisningen sammen med
+resten af oplysningerne om den. Uden den er en forbedring bare et tal, der
+ændrede sig af sig selv, og så kan skærmen ikke svare på, hvad der hjalp.
+
+Definitionen af processer, testtyper og metrikker står i
+[`backend/app/lots.py`](backend/app/lots.py) og kommer ud gennem
+`/api/lots/meta`. Frontenden gentager den ikke: en ny metrik er én ændring, ikke
+to der skal holdes ens.
+
+### Alarmen
+
+En prøve uden `acknowledged_at` alarmerer: lot-boksen skifter kant, der kommer
+et blinkende "Nyt resultat" i headeren, og proceskortet og dets fane får en
+prik. **Kortet alarmerer også, når det ukvitterede ligger på den fane, der ikke
+er valgt**, ellers kunne et nyt resultat ligge og blinke bag en fane, ingen
+kigger på.
+
+Intet forsvinder på en timer. Et resultat, ingen har set, er stadig et
+resultat, ingen har set. `prefers-reduced-motion` erstatter blinket med en
+større, statisk markering frem for at fjerne det.
+
+**Skærmen viser ét lot, og kun ét.** Vil man et andet, går man tilbage til
+forsiden. Det er også dér, et ukvitteret resultat på et *andet* lot bliver
+synligt: lot-listen markerer de lots, der venter, og henter sig selv forfra
+hvert 15. sekund.
+
+### Stemplet
+
+Post Cleaning er ikke "juster og prøv igen", der er ikke noget at skrue på.
+Den er et kvalitetsstempel og indrammes derfor anderledes. Lottet kan først
+godkendes eller afvises, når Post Cleaning har mindst én prøve af **begge**
+testtyper, og grunden står på skærmen frem for at knappen bare er grå. Et
+stempel uden det bagvedliggende er værre end intet stempel, for nogen tror på
+det.
+
+### Sådan bevæger man sig ned gennem hierarkiet
+
+Fire klik, ét pr. niveau, og hvert klik gør præcis én ting:
+
+| Klik på | Sker der |
+| --- | --- |
+| Et lot på forsiden | Monitoren for det lot |
+| Et proceskort | Prøvehistorikken nedenunder skifter til det trin |
+| En fane på Post Cleaning | Både fanen og historikken skifter til den testtype |
+| En række i historikken | Prøvevisningen, sidste led |
+
+**Hele proceskortet er knappen**, ikke kun overskriften. Skærmen hænger på en
+stor touchskærm, og dér er et trykfelt på hele rammen forskellen på at ramme og
+at prøve igen. Trykfeltet ligger under indholdet, og de rigtige knapper i kortet
+ligger over det, så "Kvittér" og fanerne stadig kan trykkes hver for sig.
+Knapperækkerne er bredere end deres knapper og er derfor sat til at lade klik
+falde igennem, ellers ville hele båndet omkring "Kvittér" være dødt.
+
+Kortet markeres, når det er dét, tabellen viser. Der er ingen "Alle
+prøver"-knap ved siden af: to affordanser til det samme lærer ingen noget.
+
+Processerne har ingen forklarende undertekst. Operatøren ved godt, hvad der
+sker i Cleaning, hun står ved maskinen, og en linje der forklarer det koster
+plads på hvert eneste kort hele dagen.
+
+**Kæden er ét gitter, og kortene arver dets rækker.** Uden det måler hvert kort
+sig selv, og så står overskrift, hovedtal og tabel i trappe hen over de tre
+trin, fordi Post Cleaning har en fanerække mere end de to andre. De to kort
+uden faner får en tom række af samme højde i stedet. Under 1080 px falder det
+hele til én spalte, og så måler kortene sig selv igen, for der er ikke længere
+noget at flugte med.
+
+Lot-boksen fylder ikke hele vinduet. Gjorde den det, blev prøvehistorikken
+skubbet ned under folden med luft imellem, og tabellen er arbejdsredskabet.
+
+### Prøvevisningen
+
+Sidste led. Her står alt om prøven: hvornår den blev taget og af hvem, hvad der
+var skruet på, hvem der kvitterede, alle metrikker med deres ændring mod den
+foregående prøve, og billedrækken fra VideometerLab.
+
+**Hovedtallet står for sig** over resten. Det er prøvens svar, og de øvrige
+klasser er, hvad det svar består af.
+
+Nedenunder står klasserne som **ét objekt**, ikke en tabel med en graf ved
+siden af: navn, værdi, ændring, og som fjerde kolonne et spor, der viser
+forrige prøve mod denne. Før stod klassenavnene to gange, én gang i tabellen og
+én gang som akseetiketter i grafen, og øjet skulle selv finde den samme række
+to steder.
+
+**Søjlen koder værdien, ikke bevægelsen.** Det er et bevidst skifte fra første
+udgave, hvor kolonnen viste forrige prøve mod denne på en fælles akse. Den akse
+virker ikke til bevægelser her: værdierne spænder fra 0,05 til 0,85,
+ændringerne fra 0,02 til 0,25, og på den skala blev netop de rækker, man vil
+undersøge, til få pixels. Samtidig stod hver ændring tre gange, som absolut
+tal, som procent og som en streglængde.
+
+Til værdierne virker den fælles akse derimod. Foreign er reelt sytten gange
+Burresnerre, og en søjle siger det på et halvt sekund, hvor ni tal med to
+decimaler skal læses ét ad gangen.
+
+Bevægelsen bæres af tallet i ændringskolonnen plus **ét hårfint mærke pr.
+tidligere prøve i trinnet**, hvert med sit prøvenummer over sig. Hele
+historikken kan derfor læses af én række: Foreign gik 2,10, så 1,10, så 0,85.
+Den seneste tidligere prøve står stærkest, de ældre træder tilbage, så
+rækkefølgen kan ses uden at læse numrene.
+
+### Skalaen skal kunne læses
+
+Søjlekolonnen er en akse, og det skal den sige selv. Første udgave viste to tal
+i hver ende, hvor det højre var største værdi gange 1,06, altså et vilkårligt
+tal som 1,17, der stod og lignede en måling. Det blev spurgt om to gange, og
+det er svaret: et tal, der skal forklares, mangler en etiket.
+
+Tre ting gør den læsbar:
+
+- **Aksen ender på et rundt tal.** `d3-scale`'s `nice()` runder domænet af til
+  et helt trin, så den slutter på 2,5 og ikke på 1,17.
+- **Alle aksens mærker vises**, ikke kun de to yderste. To tal i hver ende
+  læses som to målinger, en række jævnt fordelte tal læses som en akse.
+- **Gitterlinjer i hvert spor** står på de samme mærker. Uden dem måles søjlen
+  kun op mod kassens to kanter, og så er den en dekoration frem for en måling.
+
+Over tabellen står én sætning, der siger hvad skalaen er, og hvad mærkerne er.
+Den står **før** tabellen: man skal vide, hvad søjlen måler op imod, før man
+læser den, ikke bagefter.
+
+Aksen dækker også de tidligere prøver, ikke kun den nuværende. Ellers ville et
+mærke kunne ligge uden for søjlen. Prisen er kortere søjler, når en gammel
+prøve lå højt, og det er den ærlige konsekvens af at vise historikken.
+
+Ændringen står som absolut tal med den relative andel efter sig: `↓ 0,25
+−23 %`. To kolonner til det samme tal fik skærmen til at sige den samme ting to
+gange.
+
+Primærmetrikken er ikke i tabellen. Havde den delt akse med de andre, ville de
+ni ligge klemt op ad nul.
+
+**Ikke en radar.** Akserne på en radar står i vilkårlig rækkefølge, så figurens
+form siger mere om rækkefølgen end om tallene, og arealet vokser med kvadratet,
+så en klasse der fordobles ser fire gange værre ud.
+
+Rækkefølgen er modellens egen og ikke sorteret efter størrelse. Den er den
+samme fra prøve til prøve, og en tabel, hvor rækkerne bytter plads hver gang et
+tal ændrer sig, kan man ikke sammenligne to prøver i.
+
+### Udvikling gennem trinnet
+
+Under klasserne står **én lille kurve pr. klasse gennem alle prøver i trinnet**,
+small multiples, som moodboardets `lotanalysis`. Tabellen ovenfor svarer på
+"hvor stor er hver klasse" og bruger derfor en fælles akse. Den her svarer på
+"hvilken vej går den", og det er et spørgsmål pr. klasse.
+
+**Hvert felt har sin egen y-skala.** En fælles skala ville flade de små klasser
+helt ud: Foreign ligger omkring 0,85, Burresnerre omkring 0,05, og på Foreigns
+skala ville Burresnerres kurve være en vandret streg. Til gengæld må felternes
+højder ikke sammenlignes med hinanden, og det står på skærmen. Størrelserne
+sammenlignes i tabellen ovenfor, hvor aksen er fælles.
+
+Den prøve, man ser på, er markeret i hver kurve. Resten er kontekst i gråt.
+Ingen akser, ingen gitterlinjer, ingen tal på de øvrige punkter. Under tre
+prøver vises kurverne ikke: to punkter er ingen udvikling, kun en streg, og det
+siger delta-tallet allerede.
+
+**Peger man på en kurve, kommer værdien frem.** Et krydshår finder prøven, det
+punkt, pegepinden er nærmest, løfter sig, og en boble viser tallet.
+
+Trykfeltet er ikke prikken. Hver prøve har et gennemsigtigt bånd i fuld højde,
+omkring 65 px bredt ved tre prøver, så pegepinden kun skal være **nærmest** og
+ikke ramme fire pixels. Det gælder også for en finger på touchskærmen.
+
+Tastaturet gør det samme: feltet kan der tabbes til, fokus viser den prøve, man
+ser på, og piletasterne bladrer derfra. Det er felterne, der er tabstop, ikke
+de enkelte punkter, for ti felter med ti punkter ville ellers give hundrede.
+
+Boblen er en tilføjelse og aldrig den eneste vej til et tal. Alle værdierne står
+også i tabellen ovenfor og i prøvehistorikken.
+
+### Om diagrambiblioteker
+
+Der er hentet `d3-scale` og `d3-shape`, tilsammen omkring 11 kB gzippet. De
+regner skalaer og kurver ud og **tegner ingenting**, så udseendet forbliver
+vores.
+
+Det er et bevidst fravalg af Recharts, Nivo og Chart.js. De koster 100 til
+150 kB og leverer generiske dashboardgrafer med deres egne meninger om
+udseende, og de ville trække designet væk fra moodboardet frem for hen mod det.
+
+Selve markerne, søjlerne, sparklinen og kurverne, er derfor tegnet i hånden.
+
+Billederne kræver, at prøven er knyttet til en scanning gennem `scan_id`, som
+sættes ved registreringen under **Lots**. Er feltet tomt, siger visningen det i
+stedet for at vise et tomt felt. Klikker man et frø, åbner det i fuld størrelse
+med de 19 bånd og linserne, præcis som i scanningsbrowseren.
+
+### Forsiden sorterer efter hvad der sidst skete
+
+Ikke efter hvornår lottet blev startet. Det lot, der lige har fået en prøve, er
+det, nogen står og venter på, og det skal ligge øverst. Et lot startet i går,
+som stadig kører, må ikke ligge over et, der fik et resultat for to minutter
+siden.
+
+Kvitteringer tæller ikke med. De er nogens svar på et resultat og ikke en
+ændring af det, og listen skal ikke hoppe rundt, hver gang nogen trykker
+"kvittér".
+
+### Opsætning af linjen
+
+Maskinerne fortæller ikke selv, hvordan de er sat op, så operatøren registrerer
+det. Knappen **Opsætning** sidder i lot-boksens header, og opsætningen hænger på
+lottet.
+
+Dialogen har to trin: sæt flueben ved det, du har skruet på, og udfyld kun det
+på næste side. Listen er lang, fordi linjen har mange indstillinger, men et lot
+bruger sjældent dem alle. Skulle man rulle gennem hele listen for at udfylde fem
+felter, ville de fem drukne, og en formular, man skal lede i, bliver udfyldt
+sjusket.
+
+Opsætningen vises ikke på selve monitoren. Den er baggrund og ikke resultat, og
+skærmen skal kunne læses på tre meters afstand af en, der leder efter ét tal.
+
+Hvilke indstillinger der findes, står i
+[`content/machine-setup.yaml`](content/machine-setup.yaml), læses fra disk ved
+hver forespørgsel og kan derfor rettes uden genstart og uden kodeændring.
+
+> **Listen i filen er et udgangspunkt, ikke jeres virkelighed.** Den er skrevet
+> ud fra, hvad en renselinje til roefrø typisk har, og skal gennemgås med en,
+> der står ved maskinerne. De fire under `analyse` svarer til de
+> `[!UDFYLD]`-blokke, der stadig står åbne i procedurerne.
+
+Gemmes en opsætning, erstattes hele sættet. Fjerner operatøren et flueben,
+forsvinder værdien, frem for at blive stående usynligt og dukke op igen næste
+gang nogen åbner dialogen.
+
+### Hvornår en ændring er for lille til at vise
+
+Der skal to betingelser til, og det er ikke overdrevet. Med ét absolut tal
+alene rammer tærsklen skævt, når metrikkerne ligger i vidt forskellige
+størrelsesordener: Sugarbeet ligger omkring 97 og flytter sig i hele procent,
+mens Pileurt ligger omkring 0,08. En fælles grænse på 0,05 fik Koriander,
+Katost, Agersnerle, Pileurt og Burresnerre til at stå som uændrede, selv om de
+var faldet med en femtedel af deres egen værdi.
+
+En ændring regnes derfor kun for uændret, når den er lille **både** absolut og
+i forhold til det, den måles på:
+
+| Fra | Til | Absolut | Relativt | Vises som |
+| --- | --- | --- | --- | --- |
+| 0,25 | 0,20 | 0,05 | 20 % | ↓ 0,05 |
+| 97,60 | 97,62 | 0,02 | 0,02 % | uændret |
+
+Begge grænser står i [`backend/app/lots.py`](backend/app/lots.py) og kommer ud
+gennem `/api/lots/meta` som `flat_threshold` og `relative_threshold`, så de kun
+findes ét sted.
+
+### Hvordan skærmen holdes frisk
+
+Server-sent events fra vores egen backend på `/api/lots/stream`, ikke Supabase
+realtime i browseren.
+
+Det er ikke en præference. Prøvetabellerne har Row Level Security uden policies,
+netop for at browseren ikke skal kunne tale med Supabase, og en skærm, der står
+tændt i produktionen hele dagen, er ikke stedet at fravige det. Realtime i
+browseren ville kræve policies på tabellerne og den publicerbare nøgle ude i
+frontenden.
+
+Strømmen bærer ingen data, kun beskeden om at der er sket noget. Klienten
+henter selv bagefter, så en skærm, der har været væk i en time, ikke skal sy et
+hul sammen af hændelser, den ikke fik.
+
+Hjerteslaget hvert 15. sekund er ikke pynt: uden det kan skærmen ikke skelne
+"der er ingen nye prøver" fra "forbindelsen døde for en time siden". Falder
+strømmen ud, hentes der hvert 10. sekund i stedet, og topbaren siger hvad der
+er på færde:
+
+| Topbaren siger | Betydning |
+| --- | --- |
+| Live | Strømmen er åben, hjerteslaget kommer |
+| Henter hvert 10. sek. | Strømmen faldt ud, browseren prøver at genoprette |
+| Databasen svarer ikke | Strømmen lever, men Supabase svarer ikke |
+| Ingen kontakt | Tre hjerteslag udeblev. Skærmen er ikke frisk |
+
+| Variabel | Standard | Betydning |
+| --- | --- | --- |
+| `UBS_LOT_STREAM_INTERVAL` | `3` | Sekunder mellem serverens tjek for ændringer |
+| `UBS_LOT_STREAM_HEARTBEAT` | `15` | Sekunder mellem hjerteslag |
+
+### Det, der med vilje ikke er der
+
+- **Spec-grænser og OK/ikke-OK-domme.** Tabellen `spec_limits` findes, men
+  bruges ikke. Den dag dommene kommer, er det en visningsændring og ikke en
+  migrering midt i en høstsæson.
+- **Rettelse og sletning af prøver.** Skærmen skriver kun to ting: kvitteringen
+  og stemplet.
+
 ## Supabase
 
 Forbindelsen er målt fra maskinen her:
@@ -557,9 +920,10 @@ hører til jeres projekt og har ingen grund til at ligge i historikken.
 
 ## Databasen
 
-Postgres hos Supabase. Syv tabeller: beskeder, vedligeholdelseslog og dagens
-registrerede procedurer, plus fire til de scanninger, connectoren lægger op.
-Procedurerne selv ligger i git og kan altid genskabes.
+Postgres hos Supabase. Tolv tabeller: beskeder, vedligeholdelseslog og dagens
+registrerede procedurer, fire til de scanninger, connectoren lægger op, og fem
+til lots, prøver, deres metrikker, linjens opsætning og de spec-grænser, der
+endnu ikke bruges. Procedurerne selv ligger i git og kan altid genskabes.
 
 Skemaet ligger i [`backend/schema.sql`](backend/schema.sql), som er **genereret**
 fra `_SCHEMA` i [`backend/app/db.py`](backend/app/db.py). Ret i `db.py`, ikke i
@@ -567,7 +931,7 @@ fra `_SCHEMA` i [`backend/app/db.py`](backend/app/db.py). Ret i `db.py`, ikke i
 applikationen lægger selv skemaet på plads ved første forbindelse. Forsvinder en
 tabel under en kørende server, lægges den på plads igen, og kaldet prøves forfra.
 
-**Row Level Security er slået til på alle syv tabeller, uden en eneste policy.**
+**Row Level Security er slået til på alle tolv tabeller, uden en eneste policy.**
 Det lukker dem for Supabases REST-API. Backenden forbinder som ejer gennem
 pooleren og mærker det ikke, men uden det ville en gyldig publicerbar nøgle
 kunne læse vedligeholdelsesloggen og alle scanningsdata direkte ud af en browser.
@@ -591,13 +955,13 @@ forklaring frem for at rive resten ned.
 ## Etaper
 
 1. **Nu**: hjælpeuniverset. Procedurer, vedligeholdelsesstatus, beskeder.
-2. **Næste**: dashboard med resultater af de seneste scanninger, når connectoren
-   leverer data.
-3. **Senere**: skærm i operatørstuen, hvor fabriksoperatøren afleverer et krus
-   og får den procentvise fordeling på modellens klasser tilbage.
+2. **Nu**: operatørskærmen. Lots, processer, prøver og alarm på nye resultater.
+   Analytikeren registrerer prøverne i hånden under **Lots**.
+3. **Næste**: connectoren fylder prøverne ud automatisk i stedet for hånden, og
+   dashboardet viser resultater af de seneste scanninger.
 
-Etape 2 og 3 forudsætter connectoren, som er en separat opgave. Tre spørgsmål
-skal besvares dér, før tal kan vises for nogen:
+Etape 3 forudsætter connectoren, som er en separat opgave. Tre spørgsmål skal
+besvares dér, før tal kan komme ind ad den vej:
 
 - **Hvilken procent?** Autofeederen giver count %, area %, volume % og
   eventuelt weight %. For frø er de langt fra hinanden. Weight % kræver desuden,

@@ -1,4 +1,4 @@
-"""UBS Spectral Inside. API.
+﻿"""UBS Spectral Inside. API.
 
 Læser procedurer fra disk, holder styr på hvornår vedligeholdelse sidst blev
 udført, og bærer udviklerens beskeder ud til analytikerne.
@@ -8,16 +8,18 @@ Rører aldrig VideometerLab. Måledata kommer ind ad en anden vej.
 
 from __future__ import annotations
 
+import asyncio
 from contextlib import asynccontextmanager
 from datetime import datetime, time, timedelta, timezone
 
 from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import __version__, blobdb, classifiers, config, content, db, sync
+from . import __version__, blobdb, classifiers, config, content, db, lots, sync
 from .schemas import (
+    Acknowledgement,
     Band,
     BandSet,
     BlobRow,
@@ -27,7 +29,18 @@ from .schemas import (
     ConfusionMatrix,
     DailyCompletion,
     Dashboard,
+    LotDetail,
+    LotMeta,
+    LotSample,
+    LotSetup,
+    LotStamp,
+    LotSummary,
+    SetupOptions,
+    SetupUpdate,
+    SetupValue,
     MaintenanceReminder,
+    NewLot,
+    NewSample,
     RecentScan,
     ScanCounts,
     DisplayDetail,
@@ -703,6 +716,366 @@ def confusion_matrix(scan_id: str | None = None) -> ConfusionMatrix:
             "rettelserne falder, ikke hvor ofte modellen rammer rigtigt."
         ),
     )
+
+
+# --- Lots og prøver ---------------------------------------------------------
+#
+# Produktionslinjen, ikke instrumentet. Operatørskærmen i produktionen læser
+# her, analytikeren skriver.
+#
+# Domænet, altså processernes rækkefølge, hvilke testtyper der hører til hver
+# af dem, og hvilke metrikker en testtype har, kommer ud gennem /api/lots/meta.
+# Frontenden gentager det ikke, præcis som operatørvisningen i forvejen spørger
+# serveren om fokusklassen frem for at kende den selv.
+#
+# Rækkefølgen af ruterne herunder er ikke tilfældig. /api/lots/meta og
+# /api/lots/stream skal stå før /api/lots/{lot_no}, ellers fanger den dynamiske
+# rute dem og svarer "Lot stream findes ikke".
+
+
+def _to_lot_sample(row) -> LotSample:
+    metrics = row.get("metrics") or {}
+    return LotSample(
+        id=row["id"],
+        lot_no=row["lot_no"],
+        process=row["process"],
+        test_type=row["test_type"],
+        seq=row["seq"],
+        taken_at=row["taken_at"],
+        taken_by=row["taken_by"],
+        adjustment=row["adjustment"],
+        scan_id=row["scan_id"],
+        acknowledged_at=row["acknowledged_at"],
+        acknowledged_by=row["acknowledged_by"],
+        metrics={name: float(value) for name, value in metrics.items()},
+    )
+
+
+def _to_lot_summary(row) -> LotSummary:
+    return LotSummary(
+        lot_no=row["lot_no"],
+        variety=row["variety"],
+        item_no=row["item_no"],
+        line=row["line"],
+        started_at=row["started_at"],
+        started_by=row["started_by"],
+        stamp=row["stamp"],
+        stamped_at=row["stamped_at"],
+        stamped_by=row["stamped_by"],
+        stamp_note=row["stamp_note"],
+        sample_count=row.get("sample_count", 0),
+        unacknowledged_count=row.get("unacknowledged_count", 0),
+        last_sample_at=row.get("last_sample_at"),
+        last_activity=row.get("last_activity") or row["started_at"],
+    )
+
+
+@app.get("/api/lots/meta", response_model=LotMeta, tags=["lots"])
+def lot_meta() -> LotMeta:
+    """Domænet, som frontenden tegner skærmen ud fra.
+
+    Ligger her frem for i frontenden, fordi et metriknavn, en ny testtype eller
+    en ændret rækkefølge ellers skulle rettes to steder og kunne komme til at
+    stå forskelligt. Kræver ikke databasen.
+    """
+    return LotMeta(
+        processes=lots.PROCESSES,
+        test_types=list(lots.TEST_TYPES.values()),
+        flat_threshold=lots.FLAT_THRESHOLD,
+        relative_threshold=lots.RELATIVE_THRESHOLD,
+    )
+
+
+@app.get("/api/lots/stream", tags=["lots"])
+async def lot_stream(request: Request) -> StreamingResponse:
+    """Server-sent events: én besked, hver gang der er noget nyt at vise.
+
+    Prompten bad om Supabase realtime direkte i browseren. Det ville kræve
+    RLS-policies på prøvetabellerne og den publicerbare nøgle ude i frontenden,
+    og så kan enhver, der kan åbne skærmen i produktionen, også læse resten af
+    databasen. Kanalen går derfor gennem os, og browseren rører aldrig Supabase.
+
+    Strømmen bærer ikke data, kun beskeden om at der er sket noget. Klienten
+    henter selv bagefter. Det holder nyttelasten på nul og betyder, at en
+    klient, der har været væk, ikke skal sy et hul sammen af manglende
+    hændelser. Den henter bare forfra.
+
+    Hjerteslaget er ikke pynt. Uden det kan skærmen ikke skelne "der er ingen
+    nye prøver" fra "forbindelsen døde for en time siden", og det er præcis den
+    forskel, en skærm på en produktionsgang skal kunne vise.
+    """
+
+    async def events():
+        last: str | None = None
+        since_beat = 0.0
+
+        while True:
+            if await request.is_disconnected():
+                break
+
+            try:
+                token = await asyncio.to_thread(db.lots_change_token)
+                if last is None:
+                    # Første gennemløb. Klienten har lige hentet selv, så der
+                    # er ikke noget at fortælle den endnu.
+                    yield "event: ready\ndata: {}\n\n"
+                elif token != last:
+                    yield "event: change\ndata: {}\n\n"
+                last = token
+            except db.DatabaseUnavailable:
+                # Databasen er nede. Strømmen holdes åben og siger det, frem
+                # for at lukke og lade skærmen se frisk ud, mens den er død.
+                yield "event: degraded\ndata: {}\n\n"
+
+            await asyncio.sleep(config.LOT_STREAM_INTERVAL)
+
+            since_beat += config.LOT_STREAM_INTERVAL
+            if since_beat >= config.LOT_STREAM_HEARTBEAT:
+                since_beat = 0.0
+                # En navngiven hændelse og ikke en SSE-kommentar. En kommentar
+                # holder ganske vist forbindelsen åben gennem proxyer, men den
+                # udløser ingen hændelse i browseren, og så kan skærmen ikke
+                # selv se, at den stadig har kontakt. Det er hele formålet.
+                yield "event: beat\ndata: {}\n\n"
+
+    return StreamingResponse(
+        events(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache, no-transform",
+            "Connection": "keep-alive",
+            # Nginx buffrer text/event-stream som standard, og så kommer
+            # hændelserne i klumper eller slet ikke.
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
+@app.get("/api/lots/setup/options", response_model=SetupOptions, tags=["lots"])
+def setup_options() -> SetupOptions:
+    """Hvilke indstillinger operatøren kan sætte flueben ved.
+
+    Kommer fra content/machine-setup.yaml og læses fra disk ved hvert kald, så
+    en rettelse i listen slår igennem uden genstart. Kræver ikke databasen.
+    """
+    try:
+        return SetupOptions(groups=content.load_setup_options())
+    except content.ContentError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+def _to_lot_setup(lot_no: str, rows) -> LotSetup:
+    return LotSetup(
+        lot_no=lot_no,
+        values=[
+            SetupValue(setting_id=row["setting_id"], value=row["value"]) for row in rows
+        ],
+        set_at=max((row["set_at"] for row in rows), default=None),
+        set_by=rows[0]["set_by"] if rows else None,
+    )
+
+
+@app.get("/api/lots/{lot_no}/setup", response_model=LotSetup, tags=["lots"])
+def get_lot_setup(lot_no: str) -> LotSetup:
+    return _to_lot_setup(lot_no, db.lot_setup(lot_no))
+
+
+@app.put("/api/lots/{lot_no}/setup", response_model=LotSetup, tags=["lots"])
+def put_lot_setup(lot_no: str, update: SetupUpdate) -> LotSetup:
+    """Gem opsætningen for ét lot.
+
+    Erstatter hele sættet. Fjerner operatøren et flueben, forsvinder værdien,
+    frem for at blive stående usynligt og dukke op igen næste gang.
+    """
+    if db.get_lot(lot_no) is None:
+        raise HTTPException(status_code=404, detail=f"Lot {lot_no} findes ikke")
+
+    try:
+        known = content.setup_setting_ids()
+    except content.ContentError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    unknown = sorted({v.setting_id for v in update.values} - known)
+    if unknown:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "Disse indstillinger findes ikke i machine-setup.yaml: "
+                f"{', '.join(unknown)}"
+            ),
+        )
+
+    # En tom værdi er det samme som intet flueben. Gemmes den, står feltet
+    # tomt på skærmen, uden at nogen kan se om det var glemt eller sat til
+    # ingenting.
+    values = [
+        (v.setting_id, v.value.strip())
+        for v in update.values
+        if v.value.strip() != ""
+    ]
+
+    return _to_lot_setup(lot_no, db.save_lot_setup(lot_no, values, update.set_by))
+
+
+@app.get("/api/lots", response_model=list[LotSummary], tags=["lots"])
+def list_lots(limit: int = 40) -> list[LotSummary]:
+    return [_to_lot_summary(row) for row in db.list_lots(limit=min(limit, 200))]
+
+
+@app.post("/api/lots", response_model=LotSummary, status_code=201, tags=["lots"])
+def create_lot(lot: NewLot) -> LotSummary:
+    if db.get_lot(lot.lot_no.strip()) is not None:
+        raise HTTPException(
+            status_code=409, detail=f"Lot {lot.lot_no} er allerede startet"
+        )
+    return _to_lot_summary(db.add_lot(lot.lot_no, lot.variety, lot.item_no, lot.line, lot.started_by))
+
+
+@app.get("/api/lots/samples/{sample_id}", response_model=LotSample, tags=["lots"])
+def get_sample(sample_id: int) -> LotSample:
+    """Én prøve, det sidste led i hierarkiet.
+
+    Findes for prøvevisningen, som er den eneste skærm, der åbnes med en prøve
+    og ikke med et lot. Alternativet var at hente hele lottet og lede, og et
+    lot med tredive prøver bærer alle sine metrikker med.
+    """
+    row = db.get_sample(sample_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="Prøven findes ikke")
+    return _to_lot_sample(row)
+
+
+@app.post(
+    "/api/lots/samples/{sample_id}/acknowledge",
+    response_model=LotSample,
+    tags=["lots"],
+)
+def acknowledge_sample(sample_id: int, ack: Acknowledgement) -> LotSample:
+    """Operatøren kvitterer for at have set resultatet.
+
+    Er der allerede kvitteret, står den første kvittering ved magt, og kaldet
+    svarer det, der står i databasen. To operatører, der trykker samtidig på
+    den samme skærm, skal ikke give en fejl ude i produktionen.
+    """
+    db.acknowledge_sample(sample_id, ack.acknowledged_by)
+    row = db.get_sample(sample_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="Prøven findes ikke")
+    return _to_lot_sample(row)
+
+
+@app.get("/api/lots/{lot_no}", response_model=LotDetail, tags=["lots"])
+def get_lot(lot_no: str) -> LotDetail:
+    row = db.get_lot(lot_no)
+    if row is None:
+        raise HTTPException(status_code=404, detail=f"Lot {lot_no} findes ikke")
+
+    samples = [_to_lot_sample(s) for s in db.lot_samples(lot_no)]
+    summary = _to_lot_summary(row)
+    summary.sample_count = len(samples)
+    summary.unacknowledged_count = sum(1 for s in samples if s.acknowledged_at is None)
+    summary.last_sample_at = max((s.taken_at for s in samples), default=None)
+
+    return LotDetail(**summary.model_dump(), samples=samples)
+
+
+@app.post(
+    "/api/lots/{lot_no}/samples",
+    response_model=LotSample,
+    status_code=201,
+    tags=["lots"],
+)
+def create_sample(lot_no: str, sample: NewSample) -> LotSample:
+    """Registrér en prøve.
+
+    Løbenummeret tildeles af databasen og ikke af den, der taster. To
+    analytikere på det samme lot ville ellers kunne give hver sin prøve nummer
+    3, og så ville historikken vise to rækker, der påstår at være den samme.
+    """
+    if db.get_lot(lot_no) is None:
+        raise HTTPException(status_code=404, detail=f"Lot {lot_no} findes ikke")
+
+    if not lots.is_valid_scope(sample.process, sample.test_type):
+        allowed = ", ".join(lots.test_types_for(sample.process)) or "ingen"
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"{sample.test_type} hører ikke til {sample.process}. "
+                f"Tilladt her: {allowed}"
+            ),
+        )
+
+    known = lots.metric_ids(sample.test_type)
+    unknown = sorted(set(sample.metrics) - known)
+    if unknown:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"Ukendte metrikker for {sample.test_type}: {', '.join(unknown)}. "
+                f"Kendte: {', '.join(sorted(known))}"
+            ),
+        )
+
+    # En manglende metrik ville stå tom på skærmen, uden at nogen kunne se, om
+    # den var glemt eller målt til nul. Derfor kræves de alle sammen.
+    missing = sorted(known - set(sample.metrics))
+    if missing:
+        raise HTTPException(
+            status_code=422, detail=f"Disse metrikker mangler: {', '.join(missing)}"
+        )
+
+    if sample.taken_at and sample.taken_at > db.now():
+        raise HTTPException(
+            status_code=422, detail="Prøven kan ikke være taget ude i fremtiden"
+        )
+
+    row = db.add_sample(
+        lot_no=lot_no,
+        process=sample.process,
+        test_type=sample.test_type,
+        metrics=sample.metrics,
+        taken_by=sample.taken_by,
+        adjustment=sample.adjustment,
+        scan_id=sample.scan_id,
+        taken_at=sample.taken_at,
+    )
+    return _to_lot_sample({**row, "metrics": sample.metrics})
+
+
+@app.post("/api/lots/{lot_no}/stamp", response_model=LotSummary, tags=["lots"])
+def stamp_lot(lot_no: str, stamp: LotStamp) -> LotSummary:
+    """Godkend eller afvis lottet.
+
+    Kun muligt, når Post Cleaning har mindst én prøve af begge testtyper. Et
+    stempel uden det bagvedliggende er et stempel, der ikke betyder noget, og
+    det er værre end intet stempel: nogen tror på det.
+    """
+    row = db.get_lot(lot_no)
+    if row is None:
+        raise HTTPException(status_code=404, detail=f"Lot {lot_no} findes ikke")
+    if row["stamp"] is not None:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Lot {lot_no} er allerede stemplet af {row['stamped_by']}",
+        )
+
+    taken = {
+        s["test_type"]
+        for s in db.lot_samples(lot_no)
+        if s["process"] == "post_cleaning"
+    }
+    missing = [t for t in lots.test_types_for("post_cleaning") if t not in taken]
+    if missing:
+        labels = ", ".join(lots.TEST_TYPES[t].label for t in missing)
+        raise HTTPException(
+            status_code=409,
+            detail=f"Post Cleaning mangler stadig en prøve af: {labels}",
+        )
+
+    stamped = db.stamp_lot(lot_no, stamp.stamp, stamp.stamped_by, stamp.note)
+    if stamped is None:
+        raise HTTPException(status_code=409, detail="Lottet blev stemplet imens")
+    return _to_lot_summary(stamped)
 
 
 # --- Frontend ---------------------------------------------------------------

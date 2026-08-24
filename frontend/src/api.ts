@@ -8,12 +8,22 @@ import type {
   DisplayDetail,
   DisplaySample,
   Health,
+  LotDetail,
+  LotMeta,
+  LotSample,
+  LotSetup,
+  LotSummary,
+  SetupOptions,
+  SetupValue,
   MaintenanceStatus,
   Message,
   Operator,
   Procedure,
   ProcedureSummary,
+  ProcessId,
   ScanSummary,
+  StampId,
+  TestTypeId,
 } from "./types";
 
 class ApiError extends Error {
@@ -118,6 +128,63 @@ export const api = {
 
   classifiers: () => request<ClassifierVersion[]>("/analysis/classifiers"),
   confusion: () => request<ConfusionMatrix>("/analysis/confusion"),
+
+  lotMeta: () => request<LotMeta>("/lots/meta"),
+  lots: () => request<LotSummary[]>("/lots"),
+  lot: (lotNo: string) => request<LotDetail>(`/lots/${encodeURIComponent(lotNo)}`),
+  createLot: (lot: {
+    lot_no: string;
+    variety?: string | null;
+    item_no?: string | null;
+    line?: string | null;
+    started_by?: string | null;
+  }) =>
+    request<LotSummary>("/lots", { method: "POST", body: JSON.stringify(lot) }),
+  createSample: (
+    lotNo: string,
+    sample: {
+      process: ProcessId;
+      test_type: TestTypeId;
+      metrics: Record<string, number>;
+      taken_by?: string | null;
+      adjustment?: string | null;
+      scan_id?: string | null;
+    },
+  ) =>
+    request<LotSample>(`/lots/${encodeURIComponent(lotNo)}/samples`, {
+      method: "POST",
+      body: JSON.stringify(sample),
+    }),
+  sample: (sampleId: number) => request<LotSample>(`/lots/samples/${sampleId}`),
+  acknowledgeSample: (sampleId: number, acknowledgedBy: string) =>
+    request<LotSample>(`/lots/samples/${sampleId}/acknowledge`, {
+      method: "POST",
+      body: JSON.stringify({ acknowledged_by: acknowledgedBy }),
+    }),
+  stampLot: (
+    lotNo: string,
+    stamp: StampId,
+    stampedBy: string,
+    note?: string | null,
+  ) =>
+    request<LotSummary>(`/lots/${encodeURIComponent(lotNo)}/stamp`, {
+      method: "POST",
+      body: JSON.stringify({ stamp, stamped_by: stampedBy, note: note || null }),
+    }),
+
+  setupOptions: () => request<SetupOptions>("/lots/setup/options"),
+  lotSetup: (lotNo: string) =>
+    request<LotSetup>(`/lots/${encodeURIComponent(lotNo)}/setup`),
+  saveLotSetup: (lotNo: string, setBy: string, values: SetupValue[]) =>
+    request<LotSetup>(`/lots/${encodeURIComponent(lotNo)}/setup`, {
+      method: "PUT",
+      body: JSON.stringify({ set_by: setBy, values }),
+    }),
+
+  // Strømmen bærer ingen data, kun beskeden om at der er sket noget. Klienten
+  // henter selv bagefter, så en skærm, der har været væk, ikke skal sy et hul
+  // sammen af hændelser, den ikke fik.
+  lotStreamUrl: () => "/api/lots/stream",
 
   currentMessage: () => request<Message | null>("/message"),
   messages: () => request<Message[]>("/messages"),
