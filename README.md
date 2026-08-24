@@ -205,6 +205,33 @@ størrelser**, og det er den egentlige grund til, at typografien ikke matchede
 sig selv. Brødteksten er 17 px, og ingen værdi, operatøren skal læse på tre
 meters afstand, går under den.
 
+### Skriften
+
+**Inter, bundtet med applikationen** gennem `@fontsource-variable/inter`, ikke
+hentet fra et CDN. Skærmen kører på en maskine i produktionen, som ikke
+nødvendigvis har internet, og en font, der ikke kommer, giver et layout, der
+hopper, mens man kigger på det.
+
+Lotnummeret bruger ikke `tabular-nums`. Lige brede cifre gør et tal i
+displaystørrelse løst, og bindestregen i `DEMO-4110` får luft om sig.
+Tabulering hører til, hvor tal skal flugte lodret: tabelrækker og aksemærker.
+
+### Ingen kasser inde i kasser
+
+Operatørskærmen havde en ramme om tre kort, der selv er rammer. To lag kant om
+det samme indhold er det, der får en skærm til at se tung ud. Lot-headeren står
+nu direkte på kanvassen med en hårfin streg under sig, og kortene ligger under
+den. Adskillelsen kommer af luft, ikke af en streg.
+
+**Markering og alarm er to kanaler.** Kanten siger, hvilket kort tabellen
+nedenunder hører til. Et fladt bånd foroven siger, at der er et nyt resultat.
+Før bar kanten begge beskeder, og så kunne man ikke se det valgte kort, når det
+også alarmerede. En rød ramme om et helt kort læses desuden som en fejl, hvor
+et bånd læses som en markering.
+
+Alle tre kort er hvide. Før var det valgte hvidt og de to andre grå, og så bar
+fladen den samme besked som kanten.
+
 Farverne er hentet direkte ud af UBS' logofiler i `src/img/`:
 
 | Token | Hex | Rolle |

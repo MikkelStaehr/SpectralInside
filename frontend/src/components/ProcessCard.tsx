@@ -126,11 +126,17 @@ export function ProcessCard({
       {/* Faner vises kun, hvor der er noget at vælge imellem, altså kun på
           Post Cleaning. En fanerække med én fane er støj.
 
-          De to andre kort får en tom række af samme højde i stedet. Uden den
-          ville alt under fanerne på Post Cleaning ligge lavere end på de to
-          andre, og så står de tre tabeller i trappe. */}
+          De to andre kort viser i stedet testtypen som en stille etiket i det
+          samme bånd. Båndet skal alligevel være der, ellers ligger alt under
+          fanerne på Post Cleaning lavere end på de to andre, og så står de tre
+          tabeller i trappe. Et tomt bånd læses som en fejl, et bånd med navnet
+          i læses som en overskrift. */}
       {process.test_types.length === 1 && (
-        <div className="process__tabs process__tabs--none" aria-hidden="true" />
+        <div className="process__tabs">
+          <span className="tab tab--static">
+            {testType?.label ?? selected}
+          </span>
+        </div>
       )}
 
       {process.test_types.length > 1 && (
@@ -164,8 +170,10 @@ export function ProcessCard({
         </p>
       ) : (
         <>
+          {/* Testtypen står i båndet ovenfor og ikke også her. Linjen handler
+              om prøven, ikke om hvilken slags prøve det er. */}
           <p className="process__which">
-            {testType?.label ?? selected} · prøve #{latest.seq} af {scope.length}
+            Prøve #{latest.seq} af {scope.length}
             <span>{time.format(new Date(latest.taken_at))}</span>
           </p>
 
