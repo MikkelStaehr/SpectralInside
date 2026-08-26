@@ -200,6 +200,27 @@ Forskellen mellem kanvas og flade er lille med vilje. Adskillelsen kommer af
 hårfine linjer, ikke af et spring i lyshed. Sidebaren er hvid som fladerne og
 skilles fra indholdet af sin kant.
 
+### Status fylder ikke en hel flade
+
+Påmindelserne på arbejdsbordet var fyldte farveklodser, to over hinanden, og
+med den roligere kanvas blev de det højeste på skærmen. En påmindelse skal
+kunne ses uden at overdøve alt andet.
+
+De er nu hvide flader med en 3 px farvet kant i venstre side, og farven bliver
+i kanten, i ikonet og i handlingen. Det er det samme greb som båndet foroven på
+et proceskort, drejet til en række.
+
+Beskeden på arbejdsbordet havde den samme farvede bjælke, selv om den ikke er
+en advarsel. Den er fjernet: mærket `BESKED` siger det allerede, og to ens
+greb til to forskellige ting kan ikke skelnes.
+
+### `.panel` er en skal uden plads
+
+Panelet har ingen indvendig padding. Indholdet hører hjemme i `.panel__head` og
+en krop med sin egen. Bruger man `.panel` direkte med en `<h2>`, lander
+overskriften på kanten. Det er sket tre steder undervejs, så det er værd at
+kende, når der bygges videre.
+
 **Fladt, skarpt og roligt.** Fire regler, som `styles.css` retter sig efter:
 
 | Regel | Hvad det betyder |
