@@ -8,12 +8,6 @@
 # Filen ligger i git, fordi den styrer hvad der bliver spurgt om. Ret den her,
 # genindlæs siden, så er ændringen der. Ingen genstart.
 #
-# ADVARSEL: listen herunder er et udgangspunkt, ikke jeres virkelighed. Den er
-# skrevet ud fra hvad en renselinje til roefrø typisk har, og skal gennemgås
-# med en, der står ved maskinerne. Slet det, I ikke har, ret enhederne, og
-# tilføj det, der mangler. Indtil da gætter operatørerne, og så er
-# registreringen mere skadelig end ingen registrering.
-#
 # Felter pr. indstilling:
 #   id       unikt inden for hele filen, bruges som nøgle i databasen
 #   label    det operatøren læser
@@ -23,69 +17,40 @@
 #   hint     kort forklaring under feltet, valgfri
 
 groups:
-  - id: pre_cleaning
-    title: Pre Cleaning
-    lead: Sortering. Grene, sten og ler tages fra.
+  # De fire herunder er skrevet af fra driftsrapportens egen "Opsætning"-blok
+  # (Indskriv B19:C23) og er dermed de rigtige. En tidligere udgave af filen
+  # gættede på sold, luftstrøm og slibetryk pr. trin. Det gæt er væk: linjen
+  # sættes op ét sted og ikke tre.
+  #
+  # Enhederne er stadig et gæt. "ø" læses som diameter, altså mm, og
+  # "Bundsold #" som en maskenummerbetegnelse frem for et mål. Ret det, hvis
+  # det er forkert — det er ét sted.
+  - id: linje
+    title: Opsætning
+    lead: Sådan er linjen sat op til dette parti.
     settings:
-      - id: pre_sold_ovre
-        label: Sold, øvre
+      - id: soldopsaetning_foroven_diameter
+        label: Foroven ø
         type: number
         unit: mm
-      - id: pre_sold_nedre
-        label: Sold, nedre
+      - id: soldopsaetning_bundsold_nr
+        label: Bundsold #
+        type: text
+        hint: Maskenummeret, som det står på soldet
+      - id: soldopsaetning_forneden_diameter
+        label: Forneden ø
         type: number
         unit: mm
-      - id: pre_sigteafstand
-        label: Sigteafstand
+      - id: soldopsaetning_bundsold_diameter
+        label: Bundsold ø
         type: number
         unit: mm
-      - id: pre_luftstroem
-        label: Luftstrøm
-        type: number
-        unit: "%"
-      - id: pre_tilfoersel
-        label: Tilførselshastighed
-        type: number
-        unit: kg/t
-
-  - id: cleaning
-    title: Cleaning
-    lead: Slibning. Korken tages af frøet.
-    settings:
-      - id: cln_slibetryk
-        label: Slibetryk
-        type: number
-        unit: bar
-      - id: cln_slibetid
-        label: Slibetid
-        type: number
-        unit: s
-      - id: cln_omdrejninger
-        label: Omdrejninger
-        type: number
-        unit: o/min
-      - id: cln_slibeskive
-        label: Slibeskive
-        type: choice
-        options: [Grov, Mellem, Fin]
-        hint: Skal udfyldes med jeres faktiske typebetegnelser
-
-  - id: post_cleaning
-    title: Post Cleaning
-    lead: Endelig kvalitetskontrol.
-    settings:
-      - id: post_sigteafstand
-        label: Sigteafstand
-        type: number
-        unit: mm
-      - id: post_luftstroem
-        label: Luftstrøm
-        type: number
-        unit: "%"
 
   # De fire herunder svarer til de [!UDFYLD]-blokke, der stadig står åbne i
-  # procedurerne. Registreres de pr. lot, kan man bagefter se, om to lots blev
-  # målt ens, og det er hele grunden til at applikationen findes.
+  # procedurerne. De står ikke i driftsrapporten, fordi de hører til
+  # analysen og ikke til renselinjen. Registreres de pr. lot, kan man bagefter
+  # se, om to lots blev målt ens, og det er hele grunden til at applikationen
+  # findes.
   - id: analyse
     title: Analyse
     lead: VideometerLab og Autofeeder.

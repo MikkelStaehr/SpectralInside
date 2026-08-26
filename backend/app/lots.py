@@ -274,6 +274,66 @@ PROCESSES: list[Process] = [
 PROCESS_BY_ID = {process.id: process for process in PROCESSES}
 
 
+# --- Stamdata ---------------------------------------------------------------
+
+
+class LotField(BaseModel):
+    """Ét felt i lottets stamdata.
+
+    Felterne er rigtige kolonner i ``lots`` og ikke nøgle/værdi-par. De har
+    hver deres type, de bliver søgt og sorteret på, og de står i sidehovedet.
+    Listen her findes, så frontenden kan tegne formularen uden at kende
+    feltnavnene, præcis som den i forvejen får metrikkerne fra serveren.
+    """
+
+    id: str
+    label: str
+    type: Literal["text", "number", "datetime"] = "text"
+    unit: str | None = None
+    hint: str | None = None
+    required: bool = Field(
+        default=False,
+        description=(
+            "Om feltet skal være udfyldt, før lottet regnes for fuldstændigt. "
+            "Ikke det samme som at det skal udfyldes ved oprettelsen: kg ind "
+            "kendes ofte først, når partiet er kørt igennem."
+        ),
+    )
+    readonly: bool = Field(
+        default=False,
+        description="Sættes af systemet og kan ikke rettes. Vises stadig.",
+    )
+
+
+# Rækkefølgen er driftsrapportens egen under "Ordre". Operatøren udfylder i
+# dag det samme skema i hånden, og en anden rækkefølge på skærmen ville gøre
+# to opgaver ud af én.
+#
+# De fem påkrævede er dem, driftsrapporten selv holder øje med: uden ordre,
+# rapport, kg ind, item og lot ind står der "Mangler ..." i arket i stedet for
+# "Alt OK". Det er deres regel, ikke min, og den er skrevet af, som den er.
+LOT_FIELDS: list[LotField] = [
+    LotField(id="lot_no", label="Ind lot nr.", required=True, readonly=True,
+             hint="Partiet, der køres. Kan ikke ændres, når lottet er oprettet."),
+    LotField(id="order_no", label="Ordre nr.", required=True),
+    LotField(id="report_no", label="Rapport nr.", required=True),
+    LotField(id="started_at", label="Start", type="datetime", readonly=True),
+    LotField(id="ended_at", label="Slut", type="datetime"),
+    LotField(id="input_kg", label="Indgangs kg", type="number", unit="kg", required=True),
+    LotField(id="item_no", label="Ind item nr.", required=True),
+    LotField(id="started_by", label="Initialer"),
+    LotField(id="variety", label="Varietet"),
+    LotField(id="line", label="Linje", hint="Hvilken renselinje partiet kører på."),
+    LotField(id="note", label="Bemærkning"),
+]
+
+LOT_FIELD_BY_ID = {field.id: field for field in LOT_FIELDS}
+
+#: Felter, en operatør kan rette efter oprettelsen. Lotnummeret er nøglen og
+#: starttidspunktet er systemets, så de to står udenfor.
+EDITABLE_LOT_FIELDS = [f.id for f in LOT_FIELDS if not f.readonly]
+
+
 def test_types_for(process_id: str) -> list[str]:
     process = PROCESS_BY_ID.get(process_id)
     return list(process.test_types) if process else []

@@ -7,7 +7,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from .lots import Process, ProcessId, StampId, TestType, TestTypeId
+from .lots import LotField, Process, ProcessId, StampId, TestType, TestTypeId
 
 MaintenanceState = Literal["ok", "due_soon", "overdue", "never", "event_driven"]
 
@@ -298,6 +298,14 @@ class ClassifierVersion(BaseModel):
 class LotMeta(BaseModel):
     processes: list[Process] = []
     test_types: list[TestType] = []
+    lot_fields: list[LotField] = Field(
+        default_factory=list,
+        description=(
+            "Stamdatafelterne i driftsrapportens rækkefølge. Frontenden tegner "
+            "formularen ud fra dem og kender derfor hverken feltnavne eller "
+            "hvilke der er påkrævede."
+        ),
+    )
     flat_threshold: float = Field(
         description=(
             "Absolut grænse for hvornår en ændring vises som uændret. Gælder "
@@ -350,6 +358,21 @@ class LotSummary(BaseModel):
     line: str | None = None
     started_at: datetime
     started_by: str | None = None
+    # Stamdata fra driftsrapportens "Ordre"-blok.
+    order_no: str | None = None
+    report_no: str | None = None
+    input_kg: float | None = None
+    ended_at: datetime | None = None
+    note: str | None = None
+    missing: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Påkrævede stamdatafelter, der endnu ikke er udfyldt. Driftsrapporten "
+            "har den samme kontrol og skriver 'Mangler Ordre Nr' i stedet for "
+            "'Alt OK'. Det er en huskeliste, ikke en spærring: kg ind kendes "
+            "først, når partiet er kørt igennem."
+        ),
+    )
     stamp: StampId | None = None
     stamped_at: datetime | None = None
     stamped_by: str | None = None
@@ -379,11 +402,47 @@ class LotDetail(LotSummary):
 
 
 class NewLot(BaseModel):
+    """Oprettelsen af et lot.
+
+    Kun lotnummeret er krævet. De øvrige stamdatafelter er markeret som
+    påkrævede i ``LotField``, men det gælder for det fuldstændige lot og ikke
+    for oprettelsen: en operatør, der skal have partiet i gang, kender ikke kg
+    ind endnu, og en formular, der spærrer, ender med at blive udfyldt med
+    gætterier. Hvad der mangler, står på lottet bagefter.
+    """
+
     lot_no: str = Field(min_length=1, max_length=60)
     variety: str | None = Field(default=None, max_length=120)
     item_no: str | None = Field(default=None, max_length=60)
     line: str | None = Field(default=None, max_length=60)
     started_by: str | None = Field(default=None, max_length=80)
+    order_no: str | None = Field(default=None, max_length=60)
+    report_no: str | None = Field(default=None, max_length=60)
+    input_kg: float | None = Field(default=None, ge=0)
+    ended_at: datetime | None = None
+    note: str | None = Field(default=None, max_length=500)
+
+
+class LotUpdate(BaseModel):
+    """Rettelse af stamdata på et lot, der kører.
+
+    Alt er valgfrit, og kun det, kaldet nævner, bliver rørt. Et lot får sine
+    oplysninger lidt ad gangen, så en formular, der sendte hele objektet, ville
+    rydde det, den ikke kendte.
+
+    Lotnummer og starttidspunkt står ikke her. Det ene er nøglen, det andet er
+    systemets eget.
+    """
+
+    variety: str | None = Field(default=None, max_length=120)
+    item_no: str | None = Field(default=None, max_length=60)
+    line: str | None = Field(default=None, max_length=60)
+    started_by: str | None = Field(default=None, max_length=80)
+    order_no: str | None = Field(default=None, max_length=60)
+    report_no: str | None = Field(default=None, max_length=60)
+    input_kg: float | None = Field(default=None, ge=0)
+    ended_at: datetime | None = None
+    note: str | None = Field(default=None, max_length=500)
 
 
 class NewSample(BaseModel):

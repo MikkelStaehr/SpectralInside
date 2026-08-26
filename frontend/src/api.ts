@@ -132,14 +132,22 @@ export const api = {
   lotMeta: () => request<LotMeta>("/lots/meta"),
   lots: () => request<LotSummary[]>("/lots"),
   lot: (lotNo: string) => request<LotDetail>(`/lots/${encodeURIComponent(lotNo)}`),
-  createLot: (lot: {
-    lot_no: string;
-    variety?: string | null;
-    item_no?: string | null;
-    line?: string | null;
-    started_by?: string | null;
-  }) =>
+  /**
+   * Opret et lot med stamdata.
+   *
+   * Feltnavnene staar i `LotField` fra `/lots/meta`, saa formularen bygges af
+   * dem og ikke af en liste her. Derfor er nyttelasten et frit objekt: en
+   * fast signatur ville skulle rettes hver gang rapporten fik et felt mere.
+   */
+  createLot: (lot: { lot_no: string } & Record<string, unknown>) =>
     request<LotSummary>("/lots", { method: "POST", body: JSON.stringify(lot) }),
+
+  /** Ret stamdata. Kun de felter, kaldet naevner, bliver roert. */
+  updateLot: (lotNo: string, fields: Record<string, unknown>) =>
+    request<LotSummary>(`/lots/${encodeURIComponent(lotNo)}`, {
+      method: "PATCH",
+      body: JSON.stringify(fields),
+    }),
   createSample: (
     lotNo: string,
     sample: {

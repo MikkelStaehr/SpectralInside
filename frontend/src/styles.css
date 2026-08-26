@@ -2980,26 +2980,23 @@ p:last-child {
 }
 
 .process__key-head {
-  margin: 0 0 6px;
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  gap: 10px;
+  margin: 0;
   font-size: 13px;
-  color: var(--text-muted);
+  font-weight: 500;
+  color: var(--text);
 }
 
-.process__key-head span:first-child {
-  color: var(--text);
-  font-weight: 500;
+/* Kilden paa sin egen linje. Ved siden af metriknavnet er der ikke plads til
+   baade "Skader i alt" og "Cleaning Damage #3 · 12.56" i en celle paa 207 px,
+   og saa er det metriknavnet, der bliver klippet. */
+.process__key-source {
+  margin: 1px 0 5px;
+  font-size: 13px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-
-.process__key-head span + span {
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
 }
 
 .process__key-value {
@@ -4109,6 +4106,119 @@ p:last-child {
   font-size: 15px;
   color: var(--text-muted);
   font-variant-numeric: tabular-nums;
+}
+
+/* Stamdata har ingen taeller i foden, saa knapperne skal selv soege mod
+   hoejre. Opsaetningsarket skubber dem med sin taeller og roeres ikke. */
+.sheet__foot--end {
+  justify-content: flex-end;
+}
+
+/* --- Stamdata -------------------------------------------------------------- */
+
+/* To spalter. Felterne er korte og mange, og under hinanden ville arket blive
+   en rulle, hvor det, man leder efter, altid er lige uden for skaermen. */
+.stamdata {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 18px 24px;
+}
+
+.stamdata__field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+/* Bemaerkningen er en saetning og ikke et nummer, saa den faar hele bredden. */
+.stamdata__field--wide {
+  grid-column: 1 / -1;
+}
+
+.stamdata__label {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+/* "Paakraevet" staar stille. Et roedt maerke ved siden af otte felter goer
+   arket til en fejlliste, foer nogen har skrevet noget som helst. */
+.stamdata__label em {
+  font-style: normal;
+  font-size: 12px;
+  font-weight: 400;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.stamdata__input {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.stamdata__input input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.stamdata__input em {
+  font-style: normal;
+  font-size: 13px;
+  color: var(--text-muted);
+  flex: none;
+}
+
+.stamdata__hint {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+/* Den samme kontrol som i driftsrapporten, hvor der staar "Mangler Ordre Nr"
+   i stedet for "Alt OK". Det er en huskeliste, saa den skal ikke vaere roed. */
+.stamdata__missing {
+  margin: 22px 0 0;
+  padding: 12px 14px;
+  background: var(--surface-2);
+  display: flex;
+  align-items: baseline;
+  gap: 9px;
+  font-size: 15px;
+  color: var(--text-muted);
+}
+
+.stamdata__missing svg {
+  flex: none;
+  position: relative;
+  top: 2px;
+}
+
+/* Manglelisten i lothovedet. En knap, fordi den fører hen til det ark, hvor
+   man kan udfylde det, og ikke bare er et skilt.
+
+   Rolig og ikke roed. Et lot uden kg ind er ikke i stykker, det er bare ikke
+   faerdigt, og et alarmfarvet maerke ved siden af "Nyt resultat" ville laere
+   operatoeren at se bort fra dem begge to. */
+.badge--todo {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 12px;
+  font-size: 15px;
+  border: 1px solid var(--border-strong);
+  border-radius: 0;
+  background: none;
+  cursor: pointer;
+  color: var(--text-muted);
+}
+
+.badge--todo:hover {
+  color: var(--text);
+  border-color: var(--text-muted);
 }
 
 .setup__group {

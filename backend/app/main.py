@@ -35,6 +35,7 @@ from .schemas import (
     LotSetup,
     LotStamp,
     LotSummary,
+    LotUpdate,
     SetupOptions,
     SetupUpdate,
     SetupValue,
@@ -751,6 +752,20 @@ def _to_lot_sample(row) -> LotSample:
     )
 
 
+def _missing_fields(row) -> list[str]:
+    """Påkrævede stamdatafelter, der endnu er tomme.
+
+    Driftsrapporten har den samme kontrol i et regneark og skriver "Mangler
+    Ordre Nr" i stedet for "Alt OK". Reglen er deres, den er skrevet af som den
+    er, og den spærrer ikke for noget: den siger bare, hvad der udestår.
+    """
+    return [
+        field.id
+        for field in lots.LOT_FIELDS
+        if field.required and row.get(field.id) in (None, "")
+    ]
+
+
 def _to_lot_summary(row) -> LotSummary:
     return LotSummary(
         lot_no=row["lot_no"],
@@ -759,6 +774,12 @@ def _to_lot_summary(row) -> LotSummary:
         line=row["line"],
         started_at=row["started_at"],
         started_by=row["started_by"],
+        order_no=row.get("order_no"),
+        report_no=row.get("report_no"),
+        input_kg=row.get("input_kg"),
+        ended_at=row.get("ended_at"),
+        note=row.get("note"),
+        missing=_missing_fields(row),
         stamp=row["stamp"],
         stamped_at=row["stamped_at"],
         stamped_by=row["stamped_by"],
@@ -781,6 +802,7 @@ def lot_meta() -> LotMeta:
     return LotMeta(
         processes=lots.PROCESSES,
         test_types=list(lots.TEST_TYPES.values()),
+        lot_fields=lots.LOT_FIELDS,
         flat_threshold=lots.FLAT_THRESHOLD,
         relative_threshold=lots.RELATIVE_THRESHOLD,
     )
@@ -928,7 +950,38 @@ def create_lot(lot: NewLot) -> LotSummary:
         raise HTTPException(
             status_code=409, detail=f"Lot {lot.lot_no} er allerede startet"
         )
-    return _to_lot_summary(db.add_lot(lot.lot_no, lot.variety, lot.item_no, lot.line, lot.started_by))
+
+    # Kun felter, der står i LOT_FIELDS, når frem til en kolonne. Listen er
+    # domænets, ikke skemaets, så en model med et felt for meget kan ikke
+    # skrive udenom den.
+    fields = {
+        name: value
+        for name, value in lot.model_dump(exclude={"lot_no"}).items()
+        if name in lots.EDITABLE_LOT_FIELDS
+    }
+    return _to_lot_summary(db.add_lot(lot.lot_no, **fields))
+
+
+@app.patch("/api/lots/{lot_no}", response_model=LotSummary, tags=["lots"])
+def edit_lot(lot_no: str, update: LotUpdate) -> LotSummary:
+    """Ret stamdata på et lot, der kører.
+
+    ``exclude_unset`` er det bærende: kun de felter, kaldet faktisk nævnte,
+    bliver rørt. Et lot får sine oplysninger lidt ad gangen, og en formular,
+    der sendte hele objektet, ville rydde det, den ikke kendte.
+    """
+    if db.get_lot(lot_no) is None:
+        raise HTTPException(status_code=404, detail=f"Lot {lot_no} findes ikke")
+
+    fields = {
+        name: value
+        for name, value in update.model_dump(exclude_unset=True).items()
+        if name in lots.EDITABLE_LOT_FIELDS
+    }
+    row = db.update_lot(lot_no, fields)
+    if row is None:
+        raise HTTPException(status_code=404, detail=f"Lot {lot_no} findes ikke")
+    return _to_lot_summary(row)
 
 
 @app.get("/api/lots/samples/{sample_id}", response_model=LotSample, tags=["lots"])

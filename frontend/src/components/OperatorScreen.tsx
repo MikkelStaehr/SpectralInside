@@ -29,6 +29,7 @@ import { Icon } from "./Icon";
 import { ProcessCard } from "./ProcessCard";
 import { SampleHistory } from "./SampleHistory";
 import { SetupDialog } from "./SetupDialog";
+import { LotSheet } from "./LotSheet";
 
 const started = new Intl.DateTimeFormat("da-DK", {
   day: "numeric",
@@ -63,6 +64,14 @@ export function OperatorScreen({ lotNo, onBack, onOpenSample }: Props) {
   const [meta, setMeta] = useState<LotMeta | null>(null);
   const [lot, setLot] = useState<LotDetail | null>(null);
   const [setupOpen, setSetupOpen] = useState(false);
+  const [stamdataOpen, setStamdataOpen] = useState(false);
+
+  // Feltnavne til de manglende felter. Serveren sender id'er, ikke etiketter,
+  // og "input_kg" er ikke noget, nogen skal læse på en produktionsgang.
+  const fieldLabels = useMemo(
+    () => new Map((meta?.lot_fields ?? []).map((f) => [f.id, f.label])),
+    [meta],
+  );
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -223,7 +232,14 @@ export function OperatorScreen({ lotNo, onBack, onOpenSample }: Props) {
                 <h1>{lot.lot_no}</h1>
               </div>
 
+              {/* Kun de fem, man har brug for at kende, mens partiet kører.
+                  Resten af stamdata bor i sit eget ark, ellers bliver hovedet
+                  et regneark, man skal læse i stedet for at kigge på. */}
               <dl className="lotbox__facts">
+                <div>
+                  <dt>Ordre nr.</dt>
+                  <dd>{lot.order_no ?? "ikke angivet"}</dd>
+                </div>
                 <div>
                   <dt>Varietet</dt>
                   <dd>{lot.variety ?? "ikke angivet"}</dd>
@@ -250,6 +266,32 @@ export function OperatorScreen({ lotNo, onBack, onOpenSample }: Props) {
                   </span>
                 )}
                 <StatusPill lot={lot} />
+                {/* Den samme kontrol som i driftsrapporten. Står der noget,
+                    er det en huskeliste og ikke en fejl: lottet må gerne køre,
+                    mens kg ind stadig er ukendt. */}
+                {lot.missing.length > 0 && (
+                  <button
+                    type="button"
+                    className="badge badge--todo"
+                    onClick={() => setStamdataOpen(true)}
+                    title={lot.missing
+                      .map((id) => fieldLabels.get(id) ?? id)
+                      .join(", ")}
+                  >
+                    <Icon name="info" size={14} strokeWidth={2.2} />
+                    {lot.missing.length === 1
+                      ? "1 felt mangler"
+                      : `${lot.missing.length} felter mangler`}
+                  </button>
+                )}
+                <button
+                  type="button"
+                  className="btn btn--ghost"
+                  onClick={() => setStamdataOpen(true)}
+                >
+                  <Icon name="file-text" size={17} strokeWidth={2.2} />
+                  Stamdata
+                </button>
                 <button
                   type="button"
                   className="btn btn--ghost"
@@ -320,6 +362,15 @@ export function OperatorScreen({ lotNo, onBack, onOpenSample }: Props) {
           lotNo={lot.lot_no}
           setBy={acknowledgedBy(lot)}
           onClose={() => setSetupOpen(false)}
+          onSaved={refresh}
+        />
+      )}
+
+      {stamdataOpen && lot && meta && (
+        <LotSheet
+          fields={meta.lot_fields}
+          lot={lot}
+          onClose={() => setStamdataOpen(false)}
           onSaved={refresh}
         />
       )}

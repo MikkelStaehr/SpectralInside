@@ -14,7 +14,6 @@
 import type {
   LotDetail,
   LotSample,
-  Metric,
   Process,
   StampId,
   TestType,
@@ -96,8 +95,6 @@ export function ProcessCard({
   const previous = scope.length > 1 ? scope[scope.length - 2] : undefined;
   const pending = unacknowledged(lot.samples, process.id, selected);
 
-  const primary = testType?.metrics.find((m) => m.primary);
-
   // De ordnede fordelinger står som stablet søjle under hovedtallet, ikke som
   // rækker. Uden den opdeling blandede kortet FV1, FV2 og FV3 ind mellem
   // klasserne, som var de det samme slags tal.
@@ -130,35 +127,30 @@ export function ProcessCard({
     : [];
   const qualitySample = qualityScope[qualityScope.length - 1];
 
-  // To nøgletal, aldrig tre. Det venstre følger fanen, det højre står fast, og
-  // begge har deres pil: andelen af monogerm skal kunne følges, uden at man
-  // først skal klikke sig ind på CT-fanen.
+  // To nøgletal, aldrig tre, og de skifter ikke, når fanen gør. Toppen af
+  // kortet er trinnets tilstand, ikke fanens: skal operatøren først klikke for
+  // at se, om monogerm-andelen stiger, er tallet lige så godt gemt væk.
   //
-  // Står CT-fanen selv for det venstre tal, er de to det samme, og så vises
-  // det kun én gang. To ens tal ved siden af hinanden er ikke to nøgletal.
-  const keys: {
-    type: TestType;
-    metric: Metric;
-    sample: LotSample;
-    previous?: LotSample;
-  }[] = [];
+  // Fanen bestemmer kun tabellen nedenunder. Hvad de to nøgletal er, følger af
+  // processen: den første testtype på trinnet, og kvaliteten.
+  const keyOf = (id: TestTypeId | undefined) => {
+    const type = id ? testTypes[id] : undefined;
+    const metric = type?.metrics.find((m) => m.primary);
+    const seen = id ? samplesIn(lot.samples, process.id, id) : [];
+    const sample = seen[seen.length - 1];
+    if (!type || !metric || !sample) return null;
+    return {
+      type,
+      metric,
+      sample,
+      previous: seen.length > 1 ? seen[seen.length - 2] : undefined,
+    };
+  };
 
-  if (latest && primary && testType && selected !== qualityId) {
-    keys.push({ type: testType, metric: primary, sample: latest, previous });
-  }
-
-  const qualityPrimary = qualityType?.metrics.find((m) => m.primary);
-  if (qualitySample && qualityPrimary && qualityType) {
-    keys.push({
-      type: qualityType,
-      metric: qualityPrimary,
-      sample: qualitySample,
-      previous:
-        qualityScope.length > 1
-          ? qualityScope[qualityScope.length - 2]
-          : undefined,
-    });
-  }
+  const keys = [
+    keyOf(process.test_types.find((id) => id !== qualityId)),
+    keyOf(qualityId),
+  ].filter((k): k is NonNullable<typeof k> => k !== null);
 
   return (
     <article
@@ -197,15 +189,13 @@ export function ProcessCard({
                 {/* Hvert tal nævner sin egen prøve. De to kommer fra hver sin
                     scanning, og uden kilden ville de læses som ét resultat.
 
-                    Testtypen nævnes kun, når den ikke er den valgte fane.
-                    Står den fremhævet nedenunder, er "Cleaning Damage #3" tre
-                    ord for meget, og de skubbede metriknavnet ud i "S...". */}
-                <p className="process__key-head">
-                  <span>{k.metric.label}</span>
-                  <span>
-                    {k.type.id !== selected && `${k.type.label} `}#
-                    {k.sample.seq} · {time.format(new Date(k.sample.taken_at))}
-                  </span>
+                    Kilden står på sin egen linje. Ved siden af metriknavnet
+                    fyldte "Cleaning Damage #3 · 12.56" mere end cellen, og så
+                    blev "Skader i alt" klippet til "S...". */}
+                <p className="process__key-head">{k.metric.label}</p>
+                <p className="process__key-source">
+                  {k.type.label} #{k.sample.seq} ·{" "}
+                  {time.format(new Date(k.sample.taken_at))}
                 </p>
                 <p className="process__key-value">
                   <span className="process__value">

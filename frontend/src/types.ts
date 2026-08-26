@@ -276,9 +276,30 @@ export interface Process {
   stamp: boolean;
 }
 
+/**
+ * Ét stamdatafelt paa et lot.
+ *
+ * Listen kommer fra serveren, saa formularen kan tegnes uden at frontenden
+ * kender feltnavnene. Raekkefoelgen er driftsrapportens egen: operatoeren
+ * udfylder i dag det samme skema i haanden, og en anden raekkefoelge paa
+ * skaermen ville goere to opgaver ud af én.
+ */
+export interface LotField {
+  id: string;
+  label: string;
+  type: "text" | "number" | "datetime";
+  unit: string | null;
+  hint: string | null;
+  /** Skal vaere udfyldt, foer lottet er fuldstaendigt. Spaerrer ikke oprettelsen. */
+  required: boolean;
+  /** Saettes af systemet. Vises, men kan ikke rettes. */
+  readonly: boolean;
+}
+
 export interface LotMeta {
   processes: Process[];
   test_types: TestType[];
+  lot_fields: LotField[];
   flat_threshold: number;
   relative_threshold: number;
 }
@@ -306,6 +327,17 @@ export interface LotSummary {
   line: string | null;
   started_at: string;
   started_by: string | null;
+  /** Stamdata fra driftsrapportens "Ordre"-blok. */
+  order_no: string | null;
+  report_no: string | null;
+  input_kg: number | null;
+  ended_at: string | null;
+  note: string | null;
+  /**
+   * Paakraevede stamdatafelter, der endnu er tomme. En huskeliste og ikke en
+   * spaerring: kg ind kendes foerst, naar partiet er koert igennem.
+   */
+  missing: string[];
   stamp: StampId | null;
   stamped_at: string | null;
   stamped_by: string | null;

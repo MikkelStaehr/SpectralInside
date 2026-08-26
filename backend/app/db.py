@@ -189,6 +189,26 @@ CREATE INDEX IF NOT EXISTS idx_lots_start ON lots (started_at DESC);
 -- der blev lagt op foer feltet fandtes, ogsaa faar det.
 ALTER TABLE lots ADD COLUMN IF NOT EXISTS item_no TEXT;
 
+-- Stamdata fra driftsrapportens "Ordre"-blok. Lottet oprettes af et menneske
+-- med de her felter og faar sine maalinger bagefter. Foer var det omvendt: et
+-- lot opstod, fordi Videometeret scannede noget, og saa var der ingen at
+-- spoerge om hvad partiet egentlig var.
+ALTER TABLE lots ADD COLUMN IF NOT EXISTS order_no  TEXT;
+ALTER TABLE lots ADD COLUMN IF NOT EXISTS report_no TEXT;
+ALTER TABLE lots ADD COLUMN IF NOT EXISTS input_kg  NUMERIC;
+ALTER TABLE lots ADD COLUMN IF NOT EXISTS ended_at  TIMESTAMPTZ;
+ALTER TABLE lots ADD COLUMN IF NOT EXISTS note      TEXT;
+
+-- Hvornaar stamdata sidst blev rettet. Uden den kan SSE-stroemmen ikke se, at
+-- en operatoer har udfyldt kg ind, og de andre skaerme staar med det gamle
+-- billede, til der tilfaeldigvis kommer en proeve.
+ALTER TABLE lots ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ;
+
+-- Ordrenummeret er ikke noeglen, men det er det, papiret slaas op paa, og
+-- rapportfilen hedder "{rapport}.{ordre}.pdf". Uden indeks bliver et opslag
+-- en fuld scanning, saa snart der er en sæson bag os.
+CREATE INDEX IF NOT EXISTS idx_lots_order ON lots (order_no);
+
 CREATE TABLE IF NOT EXISTS lot_samples (
     id       BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     lot_no   TEXT NOT NULL REFERENCES lots (lot_no) ON DELETE CASCADE,
@@ -844,26 +864,66 @@ def get_lot(lot_no: str) -> Row | None:
     )
 
 
+#: Stamdatafelter, der er tekst. Samlet ét sted, saa add_lot og update_lot
+#: behandler dem ens: tom streng bliver til NULL og ikke til "".
+_LOT_TEXT = ("variety", "item_no", "line", "started_by", "order_no", "report_no", "note")
+
+
+def _clean(field: str, value: Any) -> Any:
+    """Tom streng er ikke en vaerdi.
+
+    Et felt, operatoeren har ryddet, skal blive NULL. Bliver det "" i stedet,
+    ser lottet udfyldt ud i en COALESCE og tomt paa skaermen, og saa er
+    "mangler ordrenummer" pludselig noget, ingen kan finde ud af.
+    """
+    if field in _LOT_TEXT and isinstance(value, str):
+        return value.strip() or None
+    return value
+
+
 def add_lot(
     lot_no: str,
-    variety: str | None,
-    item_no: str | None,
-    line: str | None,
-    started_by: str | None,
     started_at: datetime | None = None,
+    **fields: Any,
 ) -> Row:
+    """Opret lottet.
+
+    Stamdata kommer ind som frie felter, fordi listen staar i ``lots.py`` og
+    ikke her. Kun kendte kolonner faar lov: main.py filtrerer mod
+    ``EDITABLE_LOT_FIELDS``, saa et ukendt navn aldrig naar hertil.
+    """
+    columns = ["lot_no", "started_at"]
+    values: list[Any] = [lot_no.strip(), started_at or now()]
+    for name, value in fields.items():
+        columns.append(name)
+        values.append(_clean(name, value))
+
+    holes = ", ".join(["%s"] * len(columns))
     return _run(
         lambda conn: conn.execute(
-            "INSERT INTO lots (lot_no, variety, item_no, line, started_at, started_by) "
-            "VALUES (%s, %s, %s, %s, %s, %s) RETURNING *",
-            (
-                lot_no.strip(),
-                (variety or "").strip() or None,
-                (item_no or "").strip() or None,
-                (line or "").strip() or None,
-                started_at or now(),
-                (started_by or "").strip() or None,
-            ),
+            f"INSERT INTO lots ({', '.join(columns)}) VALUES ({holes}) RETURNING *",
+            tuple(values),
+        ).fetchone()
+    )
+
+
+def update_lot(lot_no: str, fields: dict[str, Any]) -> Row | None:
+    """Ret stamdata paa et lot, der koerer.
+
+    Kun de felter, der er med i kaldet, roeres. Et lot faar sine oplysninger
+    lidt ad gangen — kg ind kendes foerst, naar partiet er igennem — og en
+    formular, der sender hele objektet, ville nulstille det, den ikke kender.
+    """
+    if not fields:
+        return get_lot(lot_no)
+
+    sets = ", ".join(f"{name} = %s" for name in fields) + ", updated_at = %s"
+    values = [_clean(name, value) for name, value in fields.items()]
+    values.append(now())
+    values.append(lot_no)
+    return _run(
+        lambda conn: conn.execute(
+            f"UPDATE lots SET {sets} WHERE lot_no = %s RETURNING *", tuple(values)
         ).fetchone()
     )
 
@@ -1065,7 +1125,9 @@ def lots_change_token() -> str:
                 (SELECT MAX(GREATEST(taken_at, COALESCE(acknowledged_at, taken_at)))
                  FROM lot_samples) AS touched,
                 (SELECT COUNT(*) FROM lots) AS lots,
-                (SELECT MAX(GREATEST(started_at, COALESCE(stamped_at, started_at)))
+                (SELECT MAX(GREATEST(started_at,
+                                     COALESCE(stamped_at, started_at),
+                                     COALESCE(updated_at, started_at)))
                  FROM lots) AS lots_touched,
                 (SELECT COUNT(*) FROM lot_setup) AS setup,
                 (SELECT MAX(set_at) FROM lot_setup) AS setup_touched

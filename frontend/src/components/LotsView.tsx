@@ -25,6 +25,7 @@ import type {
 } from "../types";
 import { formatMetric, samplesIn } from "../lots";
 import { Icon } from "./Icon";
+import { LotSheet } from "./LotSheet";
 
 const when = new Intl.DateTimeFormat("da-DK", {
   day: "numeric",
@@ -45,9 +46,7 @@ export function LotsView({ operator, onOpenMonitor }: Props) {
   const [selected, setSelected] = useState<string | null>(null);
   const [detail, setDetail] = useState<LotDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
 
-  const [newLot, setNewLot] = useState({ lot_no: "", variety: "", item_no: "", line: "" });
   const [showNew, setShowNew] = useState(false);
 
   useEffect(() => {
@@ -86,26 +85,15 @@ export function LotsView({ operator, onOpenMonitor }: Props) {
     setDetail(lotData);
   };
 
-  const createLot = async (event: React.FormEvent) => {
-    event.preventDefault();
-    setBusy(true);
-    setError(null);
+  // Oprettelsen ligger i LotSheet og ikke her. Stamdata skal skrives ét sted,
+  // og en formular med fire felter her og elleve i arket ville give to slags
+  // lots: dem med ordrenummer og dem uden.
+  const lotCreated = async (created: LotSummary) => {
+    setSelected(created.lot_no);
     try {
-      const created = await api.createLot({
-        lot_no: newLot.lot_no.trim(),
-        variety: newLot.variety.trim() || null,
-        item_no: newLot.item_no.trim() || null,
-        line: newLot.line.trim() || null,
-        started_by: operator,
-      });
-      setNewLot({ lot_no: "", variety: "", item_no: "", line: "" });
-      setShowNew(false);
-      setSelected(created.lot_no);
       setLots(await api.lots());
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Kunne ikke starte lottet");
-    } finally {
-      setBusy(false);
+      setError(err instanceof Error ? err.message : "Kunne ikke hente listen");
     }
   };
 
@@ -149,7 +137,8 @@ export function LotsView({ operator, onOpenMonitor }: Props) {
         <button
           type="button"
           className="btn btn--ghost"
-          onClick={() => setShowNew((v) => !v)}
+          disabled={!meta}
+          onClick={() => setShowNew(true)}
         >
           <Icon name="plus" size={16} strokeWidth={2.2} />
           Nyt lot
@@ -167,45 +156,13 @@ export function LotsView({ operator, onOpenMonitor }: Props) {
         )}
       </div>
 
-      {showNew && (
-        <form className="panel lots__new" onSubmit={createLot}>
-          <label className="field">
-            <span>Lotnummer</span>
-            <input
-              value={newLot.lot_no}
-              onChange={(e) => setNewLot({ ...newLot, lot_no: e.target.value })}
-              required
-              maxLength={60}
-            />
-          </label>
-          <label className="field">
-            <span>Varietet</span>
-            <input
-              value={newLot.variety}
-              onChange={(e) => setNewLot({ ...newLot, variety: e.target.value })}
-              maxLength={120}
-            />
-          </label>
-          <label className="field">
-            <span>Item no.</span>
-            <input
-              value={newLot.item_no}
-              onChange={(e) => setNewLot({ ...newLot, item_no: e.target.value })}
-              maxLength={60}
-            />
-          </label>
-          <label className="field">
-            <span>Linje</span>
-            <input
-              value={newLot.line}
-              onChange={(e) => setNewLot({ ...newLot, line: e.target.value })}
-              maxLength={60}
-            />
-          </label>
-          <button type="submit" className="btn" disabled={busy || !newLot.lot_no.trim()}>
-            Start lot
-          </button>
-        </form>
+      {showNew && meta && (
+        <LotSheet
+          fields={meta.lot_fields}
+          operator={operator}
+          onClose={() => setShowNew(false)}
+          onSaved={lotCreated}
+        />
       )}
 
       {meta && detail && (
