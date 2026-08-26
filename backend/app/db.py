@@ -166,6 +166,36 @@ CREATE TABLE IF NOT EXISTS scan_blob_bands (
 -- Hierarkiet er stramt: lot -> proces -> testtype -> proevenummer -> metrikker.
 -- Definitionen af processer, testtyper og metrikker staar i lots.py og
 -- eksponeres gennem API'et, saa frontenden ikke gentager den.
+-- --- Ordrer ----------------------------------------------------------------
+--
+-- Det, ordrekontoret bestemmer: hvilket parti der skal koeres, hvad det er, og
+-- paa hvilken linje. Operatoeren vaelger en ordre og taster ikke et
+-- ordrenummer, for et tastet nummer kan staves paa tre maader, og saa kan
+-- ingenting afstemmes med kontoret bagefter.
+--
+-- Tabellen er ordrekontorets ende af snittet. Indtil integrationen findes,
+-- oprettes ordrer gennem det samme API, som kontoret vil kalde.
+CREATE TABLE IF NOT EXISTS orders (
+    order_no   TEXT PRIMARY KEY,
+    -- Partiet, der skal koeres. Bliver til koerslens lot_no.
+    lot_no     TEXT NOT NULL,
+    item_no    TEXT,
+    variety    TEXT,
+    line       TEXT,
+    -- Kontorets tal. Det, der faktisk blev vejet ind, staar paa koerslen, og
+    -- de to er ikke det samme: forskellen er selve pointen.
+    planned_kg NUMERIC,
+    note       TEXT,
+    created_at TIMESTAMPTZ NOT NULL,
+    created_by TEXT,
+    -- Trukket tilbage af kontoret. Slettes ikke: en ordre, der har koert, skal
+    -- kunne slaas op bagefter.
+    cancelled_at TIMESTAMPTZ
+);
+
+CREATE INDEX IF NOT EXISTS idx_orders_open
+    ON orders (created_at DESC) WHERE cancelled_at IS NULL;
+
 CREATE TABLE IF NOT EXISTS lots (
     lot_no     TEXT PRIMARY KEY,
     variety    TEXT,
@@ -306,6 +336,7 @@ ALTER TABLE scans           ENABLE ROW LEVEL SECURITY;
 ALTER TABLE scan_classes    ENABLE ROW LEVEL SECURITY;
 ALTER TABLE scan_blobs      ENABLE ROW LEVEL SECURITY;
 ALTER TABLE scan_blob_bands ENABLE ROW LEVEL SECURITY;
+ALTER TABLE orders             ENABLE ROW LEVEL SECURITY;
 ALTER TABLE lots               ENABLE ROW LEVEL SECURITY;
 ALTER TABLE lot_samples        ENABLE ROW LEVEL SECURITY;
 ALTER TABLE lot_sample_metrics ENABLE ROW LEVEL SECURITY;
@@ -856,6 +887,106 @@ def list_lots(limit: int = 40) -> list[Row]:
     )
 
 
+# --- Ordrer -----------------------------------------------------------------
+
+
+def list_orders(open_only: bool = True, limit: int = 100) -> list[Row]:
+    """Ordrerne, en operatør kan vælge imellem.
+
+    ``started_lot`` er det, der afgør, om ordren stadig er ledig. Den er ikke
+    en kolonne, fordi en kørsel kan slettes eller aldrig blive til noget, og en
+    status, der skal vedligeholdes to steder, kommer før eller siden til at
+    lyve. Her udledes den af, om der findes en kørsel på ordren.
+    """
+    where = "WHERE o.cancelled_at IS NULL" if open_only else ""
+    if open_only:
+        where += " AND l.lot_no IS NULL"
+    return _run(
+        lambda conn: conn.execute(
+            f"""
+            SELECT o.*, l.lot_no AS started_lot, l.started_at AS started_at
+            FROM orders o
+            LEFT JOIN lots l ON l.order_no = o.order_no
+            {where}
+            ORDER BY o.created_at DESC
+            LIMIT %s
+            """,
+            (limit,),
+        ).fetchall()
+    )
+
+
+def get_order(order_no: str) -> Row | None:
+    return _run(
+        lambda conn: conn.execute(
+            """
+            SELECT o.*, l.lot_no AS started_lot, l.started_at AS started_at
+            FROM orders o
+            LEFT JOIN lots l ON l.order_no = o.order_no
+            WHERE o.order_no = %s
+            """,
+            (order_no,),
+        ).fetchone()
+    )
+
+
+def add_order(
+    order_no: str,
+    lot_no: str,
+    item_no: str | None,
+    variety: str | None,
+    line: str | None,
+    planned_kg: float | None,
+    note: str | None,
+    created_by: str | None,
+) -> Row:
+    return _run(
+        lambda conn: conn.execute(
+            """
+            INSERT INTO orders
+                (order_no, lot_no, item_no, variety, line, planned_kg, note,
+                 created_at, created_by)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+            RETURNING *
+            """,
+            (
+                order_no.strip(),
+                lot_no.strip(),
+                (item_no or "").strip() or None,
+                (variety or "").strip() or None,
+                (line or "").strip() or None,
+                planned_kg,
+                (note or "").strip() or None,
+                now(),
+                (created_by or "").strip() or None,
+            ),
+        ).fetchone()
+    )
+
+
+def cancel_order(order_no: str) -> Row | None:
+    """Træk ordren tilbage. Kun hvis den ikke er kørt.
+
+    ``NOT EXISTS`` i WHERE er det, der gør det. Uden den kunne kontoret trække
+    en ordre tilbage, mens partiet stod og kørte på linjen.
+    """
+    return _run(
+        lambda conn: conn.execute(
+            """
+            UPDATE orders SET cancelled_at = %s
+            WHERE order_no = %s
+              AND cancelled_at IS NULL
+              AND NOT EXISTS (SELECT 1 FROM lots WHERE order_no = %s)
+            RETURNING *
+            """,
+            (now(), order_no, order_no),
+        ).fetchone()
+    )
+
+
+# --- Lots ---------------------------------------------------------------------
+
+
 def get_lot(lot_no: str) -> Row | None:
     return _run(
         lambda conn: conn.execute(
@@ -1130,7 +1261,12 @@ def lots_change_token() -> str:
                                      COALESCE(updated_at, started_at)))
                  FROM lots) AS lots_touched,
                 (SELECT COUNT(*) FROM lot_setup) AS setup,
-                (SELECT MAX(set_at) FROM lot_setup) AS setup_touched
+                (SELECT MAX(set_at) FROM lot_setup) AS setup_touched,
+                -- Ordrer taeller med, saa en ny ordre fra kontoret dukker op
+                -- paa skaermen uden at nogen skal hente siden igen.
+                (SELECT COUNT(*) FROM orders) AS orders,
+                (SELECT MAX(GREATEST(created_at, COALESCE(cancelled_at, created_at)))
+                 FROM orders) AS orders_touched
             """
         ).fetchone()
     )
@@ -1143,5 +1279,7 @@ def lots_change_token() -> str:
             "lots_touched",
             "setup",
             "setup_touched",
+            "orders",
+            "orders_touched",
         )
     )

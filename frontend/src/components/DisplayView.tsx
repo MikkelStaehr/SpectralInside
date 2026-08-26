@@ -26,9 +26,11 @@ const startedOn = new Intl.DateTimeFormat("da-DK", {
 interface ListProps {
   lots: LotSummary[];
   onOpen: (lotNo: string) => void;
+  /** Videre til ordrevalget. Et nyt lot begynder med en ordre. */
+  onStart: () => void;
 }
 
-export function DisplayList({ lots, onOpen }: ListProps) {
+export function DisplayList({ lots, onOpen, onStart }: ListProps) {
   return (
     <div className="display">
       <header className="display__head">
@@ -42,6 +44,14 @@ export function DisplayList({ lots, onOpen }: ListProps) {
         <h1>Lots</h1>
         <p>Vælg det lot, du kører.</p>
       </header>
+
+      {/* Knappen står over listen og ikke under. Et nyt parti begynder, før
+          man har kigget listen igennem, og en knap under fem rækker er en
+          knap, man skal lede efter. */}
+      <button type="button" className="display__start" onClick={onStart}>
+        <Icon name="plus" size={24} strokeWidth={2.2} />
+        Start et lot
+      </button>
 
       {lots.length === 0 ? (
         <p className="empty">Der er ikke startet noget lot endnu.</p>

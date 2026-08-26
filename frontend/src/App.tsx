@@ -6,6 +6,7 @@ import type {
   DailyStatus,
   Dashboard,
   Health,
+  LotMeta,
   LotSummary,
   MaintenanceStatus,
   Message,
@@ -22,6 +23,7 @@ import { MessagesView } from "./components/MessagesView";
 import { OperatorBadge } from "./components/OperatorBadge";
 import { StartupWizard } from "./components/StartupWizard";
 import { DisplayList, DisplaySampleView } from "./components/DisplayView";
+import { StartRun } from "./components/StartRun";
 import { OperatorScreen } from "./components/OperatorScreen";
 import { SampleView } from "./components/SampleView";
 import { LotsView } from "./components/LotsView";
@@ -43,6 +45,7 @@ type View =
   | { name: "analysis" }
   | { name: "lots" }
   | { name: "display" }
+  | { name: "startRun" }
   | { name: "lotMonitor"; lotNo: string }
   | { name: "lotSample"; sampleId: number }
   | { name: "displaySample"; id: string };
@@ -63,6 +66,9 @@ function parseHash(hash: string): View {
       name: "lotSample",
       sampleId: Number(path.slice("visning/proeve/".length)),
     };
+  // Ordrevalget ligger også under visning, og "start" er derfor et lotnummer,
+  // der er optaget. Den skal testes før den løsere regel nedenunder.
+  if (path === "visning/start") return { name: "startRun" };
   if (path.startsWith("visning/"))
     return {
       name: "lotMonitor",
@@ -92,6 +98,8 @@ function toHash(view: View): string {
       return `#/visning/proeve/${view.sampleId}`;
     case "display":
       return "#/visning";
+    case "startRun":
+      return "#/visning/start";
     case "procedure":
       return `#/procedure/${view.id}`;
     case "scan":
@@ -346,6 +354,18 @@ export default function App() {
       <DisplayList
         lots={displayLots ?? []}
         onOpen={(lotNo) => navigate({ name: "lotMonitor", lotNo })}
+        onStart={() => navigate({ name: "startRun" })}
+      />
+    );
+  }
+
+  // Ordrevalget henter selv sine felter. Skærmen i produktionen er ikke logget
+  // ind og deler ikke det fælles kald, de andre visninger bruger.
+  if (view.name === "startRun") {
+    return (
+      <StartRunRoute
+        onBack={() => navigate({ name: "display" })}
+        onStarted={(lot) => navigate({ name: "lotMonitor", lotNo: lot.lot_no })}
       />
     );
   }
@@ -612,5 +632,36 @@ export default function App() {
         />
       )}
     </div>
+  );
+}
+
+/**
+ * Ordrevalget som selvstændig rute.
+ *
+ * Henter selv feltdefinitionerne. Skærmen i produktionen er ikke logget ind og
+ * er derfor ikke med i det fælles kald, de andre visninger deler.
+ */
+function StartRunRoute({
+  onBack,
+  onStarted,
+}: {
+  onBack: () => void;
+  onStarted: (lot: LotSummary) => void;
+}) {
+  const [meta, setMeta] = useState<LotMeta | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void api.lotMeta().then((m) => {
+      if (!cancelled) setMeta(m);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  if (!meta) return <div className="display"><p className="empty">Henter…</p></div>;
+  return (
+    <StartRun fields={meta.lot_fields} onBack={onBack} onStarted={onStarted} />
   );
 }

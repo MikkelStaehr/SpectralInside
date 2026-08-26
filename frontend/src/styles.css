@@ -1531,6 +1531,35 @@ p:last-child {
   color: var(--text-muted);
 }
 
+/* Start et lot. Staar over listen, fordi et nyt parti begynder, foer man har
+   kigget listen igennem.
+
+   Stiplet og ikke fyldt. Raekkerne nedenunder er ting, der findes, og den her
+   er en aabning, hvor der endnu ikke er noget. Var den fyldt som dem, ville
+   den laese som endnu et lot. Hoejden foelger raekkerne, saa den staar i
+   samme spor og ikke som et fremmedlegeme oeverst. */
+.display__start {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  width: 100%;
+  padding: 20px 24px;
+  background: none;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius);
+  font: inherit;
+  font-size: 21px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-align: left;
+  cursor: pointer;
+}
+
+.display__start:hover {
+  border-color: var(--link);
+  color: var(--link);
+}
+
 .display__samples {
   list-style: none;
   margin: 0;
@@ -4115,6 +4144,39 @@ p:last-child {
 }
 
 /* --- Stamdata -------------------------------------------------------------- */
+
+/* To blokke, fordi der er to, der ved noget: kontoret ved hvad der skal koeres,
+   operatoeren ved hvad der skete. Uden skellet ser ordrens laaste felter ud
+   som felter, nogen har glemt at goere noget ved. */
+.stamdata__block + .stamdata__block {
+  margin-top: 26px;
+  padding-top: 22px;
+  border-top: 1px solid var(--border);
+}
+
+.stamdata__block h3 {
+  margin: 0 0 16px;
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.stamdata__block h3 span {
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--text-muted);
+}
+
+/* Et laast felt er ikke et daarligt felt. Det er en oplysning, der kommer et
+   andet sted fra, saa det staar tydeligt og ikke halvt udvisket. */
+.stamdata__input input:disabled {
+  background: var(--surface-2);
+  color: var(--text);
+  cursor: default;
+}
 
 /* To spalter. Felterne er korte og mange, og under hinanden ville arket blive
    en rulle, hvor det, man leder efter, altid er lige uden for skaermen. */

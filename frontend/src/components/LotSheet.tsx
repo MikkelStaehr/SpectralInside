@@ -1,30 +1,36 @@
 /**
- * Stamdata på et lot: oprettelse og rettelse i ét.
+ * Stamdata på en kørsel: start og rettelse i ét.
  *
- * Lottet bliver til, fordi et menneske opretter det med ordreoplysningerne, og
- * får sine målinger bagefter. Før var det omvendt — et lot opstod, fordi
- * Videometeret scannede noget — og så var der ingen at spørge om, hvad partiet
- * egentlig var.
+ * En kørsel bliver til, fordi et menneske vælger en ordre og skriver det på,
+ * som kun linjen ved. Før var det omvendt — et lot opstod, fordi Videometeret
+ * scannede noget — og så var der ingen at spørge om, hvad partiet egentlig
+ * var.
  *
- * Felterne kommer fra serveren og står i driftsrapportens egen rækkefølge
- * under "Ordre". Operatøren udfylder i dag det samme skema i hånden, og en
- * anden rækkefølge på skærmen ville gøre to opgaver ud af én. Filen her kender
- * derfor ingen af feltnavnene.
+ * Arket har to blokke, fordi der er to, der ved noget. Ordrekontoret ved, hvad
+ * der skal køres: parti, vare, varietet, linje. Operatøren ved, hvad der
+ * faktisk skete: rapportnummer, kg ind, hvem der kørte det. Ordrens felter er
+ * låst — retter man varieteten her, men ikke på ordren, står der to
+ * forskellige svar på det samme spørgsmål.
  *
- * Kun lotnummeret spærrer. De øvrige påkrævede felter er påkrævede for det
- * *fuldstændige* lot, ikke for oprettelsen: den, der skal have partiet i gang,
+ * Felterne og deres opdeling kommer fra serveren og står i driftsrapportens
+ * egen rækkefølge. Filen her kender ingen af feltnavnene.
+ *
+ * Kun ordren spærrer. De påkrævede felter er påkrævede for den *fuldstændige*
+ * kørsel, ikke for at komme i gang: den, der skal have partiet på linjen,
  * kender ikke kg ind endnu, og en formular, der spærrer, bliver udfyldt med
- * gætterier. Hvad der mangler, står bagefter på lottet.
+ * gætterier. Hvad der mangler, står bagefter på kørslen.
  */
 
 import { useEffect, useMemo, useState } from "react";
 import { api } from "../api";
-import type { LotField, LotSummary } from "../types";
+import type { LotField, LotSummary, Order } from "../types";
 import { Icon } from "./Icon";
 
 interface Props {
   fields: LotField[];
-  /** Lottet, der rettes. Udeladt betyder, at et nyt skal oprettes. */
+  /** Ordren, der skal køres. Sat når en ny kørsel startes. */
+  order?: Order;
+  /** Kørslen, der rettes. Sat når stamdata på et lot, der kører, ændres. */
   lot?: LotSummary;
   /** Initialerne på den, der sidder ved skærmen. Forudfylder feltet. */
   operator?: string;
@@ -51,20 +57,32 @@ const toLocal = (iso: string | null | undefined) => {
 const fromLocal = (value: string) =>
   value ? new Date(value).toISOString() : null;
 
-export function LotSheet({ fields, lot, operator, onClose, onSaved }: Props) {
-  const creating = lot === undefined;
+/** Det, feltet allerede har: fra kørslen, eller fra ordren, hvis den starter. */
+function initial(
+  field: LotField,
+  lot: LotSummary | undefined,
+  order: Order | undefined,
+): string {
+  const from = (o: object | undefined) =>
+    o ? (o as unknown as Record<string, unknown>)[field.id] : undefined;
+  const raw = from(lot) ?? from(order);
+  if (raw === null || raw === undefined) return "";
+  if (field.type === "datetime") return toLocal(raw as string);
+  return String(raw);
+}
+
+export function LotSheet({ fields, order, lot, operator, onClose, onSaved }: Props) {
+  const starting = lot === undefined;
 
   const [values, setValues] = useState<Record<string, string>>(() =>
     Object.fromEntries(
       fields.map((f) => {
-        const raw = lot ? (lot as unknown as Record<string, unknown>)[f.id] : undefined;
-        if (f.type === "datetime") return [f.id, toLocal(raw as string | null)];
-        if (raw === null || raw === undefined) {
-          // Den, der står ved skærmen, er næsten altid også den, der starter
-          // partiet. Er hun det ikke, retter hun det ene felt.
-          return [f.id, creating && f.id === "started_by" ? (operator ?? "") : ""];
-        }
-        return [f.id, String(raw)];
+        const have = initial(f, lot, order);
+        // Den, der står ved skærmen, er næsten altid også den, der kører
+        // partiet. Er hun det ikke, retter hun det ene felt.
+        if (have === "" && starting && f.id === "started_by")
+          return [f.id, operator ?? ""];
+        return [f.id, have];
       }),
     ),
   );
@@ -79,14 +97,21 @@ export function LotSheet({ fields, lot, operator, onClose, onSaved }: Props) {
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
 
-  // Lotnummeret er nøglen og kan ikke rettes bagefter. Ved oprettelsen er det
-  // omvendt det ene felt, der skal udfyldes.
-  const editable = fields.filter((f) => !f.readonly || (creating && f.id === "lot_no"));
-  const shown = creating ? editable : fields.filter((f) => f.id !== "started_at" || lot);
+  const fromOrder = fields.filter((f) => f.source === "order");
+  // Starttidspunktet er systemets og findes ikke endnu, når kørslen startes.
+  const mine = fields.filter(
+    (f) => f.source !== "order" && (!starting || f.source !== "system"),
+  );
+  const editable = mine.filter((f) => !f.readonly);
 
+  // Kun det, operatøren selv kan gøre noget ved. Er et af ordrens felter tomt,
+  // er det kontoret, der mangler at udfylde det, og så hjælper det ingen at
+  // stille det på en huskeliste her.
   const outstanding = useMemo(
     () =>
-      fields.filter((f) => f.required && (values[f.id] ?? "").trim() === ""),
+      fields.filter(
+        (f) => f.required && !f.readonly && (values[f.id] ?? "").trim() === "",
+      ),
     [fields, values],
   );
 
@@ -96,7 +121,6 @@ export function LotSheet({ fields, lot, operator, onClose, onSaved }: Props) {
   const payload = () => {
     const out: Record<string, unknown> = {};
     for (const f of editable) {
-      if (f.id === "lot_no") continue;
       const raw = (values[f.id] ?? "").trim();
       if (f.type === "datetime") out[f.id] = fromLocal(raw);
       else if (f.type === "number") out[f.id] = raw === "" ? null : Number(raw);
@@ -106,17 +130,11 @@ export function LotSheet({ fields, lot, operator, onClose, onSaved }: Props) {
   };
 
   const save = async () => {
-    const lotNo = (values.lot_no ?? "").trim();
-    if (creating && lotNo === "") {
-      setError("Lottet skal have et nummer.");
-      return;
-    }
-
     setBusy(true);
     setError(null);
     try {
-      const saved = creating
-        ? await api.createLot({ lot_no: lotNo, ...payload() })
+      const saved = starting
+        ? await api.createLot({ order_no: order!.order_no, ...payload() })
         : await api.updateLot(lot!.lot_no, payload());
       onSaved(saved);
       onClose();
@@ -127,12 +145,49 @@ export function LotSheet({ fields, lot, operator, onClose, onSaved }: Props) {
     }
   };
 
+  const field = (f: LotField) => (
+    <label
+      key={f.id}
+      className={`stamdata__field${
+        f.id === "note" ? " stamdata__field--wide" : ""
+      }`}
+    >
+      <span className="stamdata__label">
+        {f.label}
+        {/* Kun på det, der faktisk kan udfyldes. "Påkrævet" ved siden af et
+            låst felt, der allerede står udfyldt, er en besked om ingenting. */}
+        {f.required && !f.readonly && (
+          <em title="Skal udfyldes, før kørslen er fuldstændig">påkrævet</em>
+        )}
+      </span>
+      <span className="stamdata__input">
+        <input
+          type={
+            f.type === "number"
+              ? "number"
+              : f.type === "datetime"
+                ? "datetime-local"
+                : "text"
+          }
+          step={f.type === "number" ? "any" : undefined}
+          value={values[f.id] ?? ""}
+          disabled={f.readonly}
+          onChange={(event) => set(f.id, event.target.value)}
+        />
+        {f.unit && <em>{f.unit}</em>}
+      </span>
+      {f.hint && <span className="stamdata__hint">{f.hint}</span>}
+    </label>
+  );
+
   return (
     <div
       className="sheet__backdrop"
       role="dialog"
       aria-modal="true"
-      aria-label={creating ? "Nyt lot" : `Stamdata for lot ${lot!.lot_no}`}
+      aria-label={
+        starting ? `Start ordre ${order!.order_no}` : `Stamdata for lot ${lot!.lot_no}`
+      }
       onClick={(event) => {
         if (event.target === event.currentTarget) onClose();
       }}
@@ -141,9 +196,9 @@ export function LotSheet({ fields, lot, operator, onClose, onSaved }: Props) {
         <header className="sheet__head">
           <div>
             <p className="sheet__eyebrow">
-              {creating ? "Driftsrapport · Ordre" : `Lot ${lot!.lot_no}`}
+              {starting ? `Ordre ${order!.order_no}` : `Lot ${lot!.lot_no}`}
             </p>
-            <h2>{creating ? "Nyt lot" : "Stamdata"}</h2>
+            <h2>{starting ? `Start lot ${order!.lot_no}` : "Stamdata"}</h2>
           </div>
           <button
             type="button"
@@ -163,58 +218,39 @@ export function LotSheet({ fields, lot, operator, onClose, onSaved }: Props) {
         )}
 
         <div className="sheet__body">
-          <p className="sheet__lead">
-            {creating
-              ? "Kun lotnummeret skal udfyldes for at komme i gang. Resten kan skrives ind, mens partiet kører."
-              : "Ret det, der har ændret sig. Felter, du lader stå tomme, bliver ryddet."}
-          </p>
+          {/* Ordrens felter står låst og øverst. Operatøren skal kunne se, at
+              hun har fat i den rigtige ordre, før hun skriver noget. */}
+          {fromOrder.length > 0 && (
+            <section className="stamdata__block">
+              <h3>
+                Fra ordren
+                <span>Kommer fra ordrekontoret og rettes ikke her</span>
+              </h3>
+              <div className="stamdata">{fromOrder.map(field)}</div>
+            </section>
+          )}
 
-          <div className="stamdata">
-            {shown.map((field) => (
-              <label
-                key={field.id}
-                className={`stamdata__field${
-                  field.type === "text" && field.id === "note"
-                    ? " stamdata__field--wide"
-                    : ""
-                }`}
-              >
-                <span className="stamdata__label">
-                  {field.label}
-                  {field.required && (
-                    <em title="Skal udfyldes, før lottet er fuldstændigt">
-                      påkrævet
-                    </em>
-                  )}
-                </span>
-                <span className="stamdata__input">
-                  <input
-                    type={
-                      field.type === "number"
-                        ? "number"
-                        : field.type === "datetime"
-                          ? "datetime-local"
-                          : "text"
-                    }
-                    step={field.type === "number" ? "any" : undefined}
-                    value={values[field.id] ?? ""}
-                    disabled={field.readonly && !(creating && field.id === "lot_no")}
-                    onChange={(event) => set(field.id, event.target.value)}
-                  />
-                  {field.unit && <em>{field.unit}</em>}
-                </span>
-                {field.hint && <span className="stamdata__hint">{field.hint}</span>}
-              </label>
-            ))}
-          </div>
+          <section className="stamdata__block">
+            <h3>
+              Det du udfylder
+              <span>
+                {starting
+                  ? "Kan skrives ind, mens partiet kører"
+                  : "Ret det, der har ændret sig"}
+              </span>
+            </h3>
+            <div className="stamdata">{mine.map(field)}</div>
+          </section>
 
           {/* Den samme kontrol som i driftsrapporten, hvor der står "Mangler
               Ordre Nr" i stedet for "Alt OK". En huskeliste, ikke en spærring. */}
           {outstanding.length > 0 && (
             <p className="stamdata__missing">
               <Icon name="info" size={15} strokeWidth={2.2} />
-              Mangler stadig: {outstanding.map((f) => f.label).join(", ")}. Lottet
-              kan godt køre imens.
+              Mangler stadig: {outstanding.map((f) => f.label).join(", ")}.
+              {starting
+                ? " Partiet kan godt sættes i gang alligevel."
+                : " Lottet kan godt køre imens."}
             </p>
           )}
         </div>
@@ -225,7 +261,7 @@ export function LotSheet({ fields, lot, operator, onClose, onSaved }: Props) {
           </button>
           <button type="button" className="btn" disabled={busy} onClick={save}>
             <Icon name="check" size={17} strokeWidth={2.2} />
-            {creating ? "Opret lot" : "Gem stamdata"}
+            {starting ? "Sæt i gang" : "Gem stamdata"}
           </button>
         </footer>
       </div>

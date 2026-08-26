@@ -13,6 +13,7 @@ import type {
   LotSample,
   LotSetup,
   LotSummary,
+  Order,
   SetupOptions,
   SetupValue,
   MaintenanceStatus,
@@ -132,14 +133,25 @@ export const api = {
   lotMeta: () => request<LotMeta>("/lots/meta"),
   lots: () => request<LotSummary[]>("/lots"),
   lot: (lotNo: string) => request<LotDetail>(`/lots/${encodeURIComponent(lotNo)}`),
+  /** Ordrerne fra kontoret. Som standard kun dem, der stadig er ledige. */
+  orders: (openOnly = true) =>
+    request<Order[]>(`/orders?open_only=${openOnly}`),
+  order: (orderNo: string) =>
+    request<Order>(`/orders/${encodeURIComponent(orderNo)}`),
+  createOrder: (order: Record<string, unknown>) =>
+    request<Order>("/orders", { method: "POST", body: JSON.stringify(order) }),
+  cancelOrder: (orderNo: string) =>
+    request<Order>(`/orders/${encodeURIComponent(orderNo)}`, { method: "DELETE" }),
+
   /**
-   * Opret et lot med stamdata.
+   * Start en koersel paa en ordre.
    *
-   * Feltnavnene staar i `LotField` fra `/lots/meta`, saa formularen bygges af
-   * dem og ikke af en liste her. Derfor er nyttelasten et frit objekt: en
-   * fast signatur ville skulle rettes hver gang rapporten fik et felt mere.
+   * Ordrens felter sendes ikke med. De kopieres paa serveren, saa klienten
+   * ikke kan skrive noget andet end det, kontoret har bestemt. Resten er
+   * operatoerens og staar i `LotField` fra `/lots/meta`, saa formularen bygges
+   * af dem og ikke af en liste her.
    */
-  createLot: (lot: { lot_no: string } & Record<string, unknown>) =>
+  createLot: (lot: { order_no: string } & Record<string, unknown>) =>
     request<LotSummary>("/lots", { method: "POST", body: JSON.stringify(lot) }),
 
   /** Ret stamdata. Kun de felter, kaldet naevner, bliver roert. */

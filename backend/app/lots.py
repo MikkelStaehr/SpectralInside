@@ -303,6 +303,14 @@ class LotField(BaseModel):
         default=False,
         description="Sættes af systemet og kan ikke rettes. Vises stadig.",
     )
+    source: Literal["order", "operator", "system"] = Field(
+        default="operator",
+        description=(
+            "Hvem feltet kommer fra. Ordrekontoret ved, hvad der skal køres; "
+            "operatøren ved, hvad der faktisk skete. Skærmen viser de to som "
+            "hver sin blok, så ingen retter i det, ordren har bestemt."
+        ),
+    )
 
 
 # Rækkefølgen er driftsrapportens egen under "Ordre". Operatøren udfylder i
@@ -313,25 +321,37 @@ class LotField(BaseModel):
 # rapport, kg ind, item og lot ind står der "Mangler ..." i arket i stedet for
 # "Alt OK". Det er deres regel, ikke min, og den er skrevet af, som den er.
 LOT_FIELDS: list[LotField] = [
-    LotField(id="lot_no", label="Ind lot nr.", required=True, readonly=True,
-             hint="Partiet, der køres. Kan ikke ændres, når lottet er oprettet."),
-    LotField(id="order_no", label="Ordre nr.", required=True),
+    LotField(id="order_no", label="Ordre nr.", required=True, source="order",
+             readonly=True),
+    LotField(id="lot_no", label="Ind lot nr.", required=True, source="order",
+             readonly=True,
+             hint="Partiet, der køres. Følger med ordren og kan ikke ændres."),
+    LotField(id="item_no", label="Ind item nr.", required=True, source="order",
+             readonly=True),
+    LotField(id="variety", label="Varietet", source="order", readonly=True),
+    LotField(id="line", label="Linje", source="order", readonly=True,
+             hint="Hvilken renselinje partiet kører på."),
     LotField(id="report_no", label="Rapport nr.", required=True),
-    LotField(id="started_at", label="Start", type="datetime", readonly=True),
-    LotField(id="ended_at", label="Slut", type="datetime"),
-    LotField(id="input_kg", label="Indgangs kg", type="number", unit="kg", required=True),
-    LotField(id="item_no", label="Ind item nr.", required=True),
+    LotField(id="input_kg", label="Indgangs kg", type="number", unit="kg",
+             required=True, hint="Det, der faktisk blev vejet ind."),
     LotField(id="started_by", label="Initialer"),
-    LotField(id="variety", label="Varietet"),
-    LotField(id="line", label="Linje", hint="Hvilken renselinje partiet kører på."),
+    LotField(id="started_at", label="Start", type="datetime", readonly=True,
+             source="system"),
+    LotField(id="ended_at", label="Slut", type="datetime"),
     LotField(id="note", label="Bemærkning"),
 ]
 
 LOT_FIELD_BY_ID = {field.id: field for field in LOT_FIELDS}
 
-#: Felter, en operatør kan rette efter oprettelsen. Lotnummeret er nøglen og
-#: starttidspunktet er systemets, så de to står udenfor.
-EDITABLE_LOT_FIELDS = [f.id for f in LOT_FIELDS if not f.readonly]
+#: Det, ordren bestemmer. Kopieres over på kørslen ved oprettelsen og rettes
+#: ikke af operatøren: retter man varieteten på kørslen, men ikke på ordren,
+#: står der to forskellige svar på det samme spørgsmål.
+ORDER_OWNED_FIELDS = [f.id for f in LOT_FIELDS if f.source == "order"]
+
+#: Felter, en operatør kan rette efter oprettelsen.
+EDITABLE_LOT_FIELDS = [
+    f.id for f in LOT_FIELDS if f.source == "operator" and not f.readonly
+]
 
 
 def test_types_for(process_id: str) -> list[str]:

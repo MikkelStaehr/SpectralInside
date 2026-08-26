@@ -294,6 +294,36 @@ export interface LotField {
   required: boolean;
   /** Saettes af systemet. Vises, men kan ikke rettes. */
   readonly: boolean;
+  /**
+   * Hvem feltet kommer fra. Ordrekontoret ved, hvad der skal koeres;
+   * operatoeren ved, hvad der faktisk skete. Skaermen viser de to som hver sin
+   * blok, saa ingen retter i det, ordren har bestemt.
+   */
+  source: "order" | "operator" | "system";
+}
+
+/**
+ * En ordre fra ordrekontoret.
+ *
+ * Operatoeren vaelger en ordre og taster ikke et ordrenummer: et tastet nummer
+ * kan staves paa tre maader, og saa kan ingenting afstemmes med kontoret.
+ */
+export interface Order {
+  order_no: string;
+  /** Partiet, der skal koeres. Bliver koerslens lot_no. */
+  lot_no: string;
+  item_no: string | null;
+  variety: string | null;
+  line: string | null;
+  /** Kontorets tal. Det, der faktisk blev vejet ind, staar paa koerslen. */
+  planned_kg: number | null;
+  note: string | null;
+  created_at: string;
+  created_by: string | null;
+  cancelled_at: string | null;
+  /** Koerslen paa ordren, hvis den er startet. Udledt og ikke gemt. */
+  started_lot: string | null;
+  started_at: string | null;
 }
 
 export interface LotMeta {

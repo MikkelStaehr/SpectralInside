@@ -19,13 +19,14 @@ import type {
   LotDetail,
   LotMeta,
   LotSummary,
+  Order,
   ProcessId,
   ScanSummary,
   TestTypeId,
 } from "../types";
 import { formatMetric, samplesIn } from "../lots";
 import { Icon } from "./Icon";
-import { LotSheet } from "./LotSheet";
+import { OrderSheet } from "./OrderSheet";
 
 const when = new Intl.DateTimeFormat("da-DK", {
   day: "numeric",
@@ -46,6 +47,7 @@ export function LotsView({ operator, onOpenMonitor }: Props) {
   const [selected, setSelected] = useState<string | null>(null);
   const [detail, setDetail] = useState<LotDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
   const [showNew, setShowNew] = useState(false);
 
@@ -85,16 +87,15 @@ export function LotsView({ operator, onOpenMonitor }: Props) {
     setDetail(lotData);
   };
 
-  // Oprettelsen ligger i LotSheet og ikke her. Stamdata skal skrives ét sted,
-  // og en formular med fire felter her og elleve i arket ville give to slags
-  // lots: dem med ordrenummer og dem uden.
-  const lotCreated = async (created: LotSummary) => {
-    setSelected(created.lot_no);
-    try {
-      setLots(await api.lots());
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Kunne ikke hente listen");
-    }
+  // Lots oprettes ikke her længere. En kørsel begynder med en ordre, og
+  // operatøren sætter den i gang fra produktionsskærmen. Herfra lægges ordren
+  // ind, indtil ordrekontoret gør det ad et snit.
+  const orderCreated = (order: Order) => {
+    setError(null);
+    setNotice(
+      `Ordre ${order.order_no} er lagt ind. Den ligger nu på ` +
+        `produktionsskærmen under "Start et lot".`,
+    );
   };
 
   return (
@@ -102,10 +103,16 @@ export function LotsView({ operator, onOpenMonitor }: Props) {
       <header className="page__head">
         <h1>Lots</h1>
         <p>
-          Start et lot, og registrér prøverne undervejs. Det, du skriver her, er
-          det, skærmen i produktionen viser.
+          Registrér prøverne på et lot, der kører. Selve lottet sættes i gang
+          fra produktionsskærmen ud fra en ordre.
         </p>
       </header>
+
+      {notice && (
+        <div className="alert" role="status">
+          <p>{notice}</p>
+        </div>
+      )}
 
       {error && (
         <div className="alert alert--warning" role="alert">
@@ -137,11 +144,10 @@ export function LotsView({ operator, onOpenMonitor }: Props) {
         <button
           type="button"
           className="btn btn--ghost"
-          disabled={!meta}
           onClick={() => setShowNew(true)}
         >
           <Icon name="plus" size={16} strokeWidth={2.2} />
-          Nyt lot
+          Ny ordre
         </button>
 
         {selected && (
@@ -156,12 +162,11 @@ export function LotsView({ operator, onOpenMonitor }: Props) {
         )}
       </div>
 
-      {showNew && meta && (
-        <LotSheet
-          fields={meta.lot_fields}
-          operator={operator}
+      {showNew && (
+        <OrderSheet
+          createdBy={operator}
           onClose={() => setShowNew(false)}
-          onSaved={lotCreated}
+          onSaved={orderCreated}
         />
       )}
 

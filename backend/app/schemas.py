@@ -351,6 +351,57 @@ class LotSample(BaseModel):
     metrics: dict[str, float] = {}
 
 
+class Order(BaseModel):
+    """En ordre fra ordrekontoret.
+
+    Kontoret bestemmer, hvad der skal køres. Operatøren vælger ordren og taster
+    ikke et ordrenummer: et tastet nummer kan staves på tre måder, og så kan
+    ingenting afstemmes med kontoret bagefter.
+    """
+
+    order_no: str
+    lot_no: str = Field(description="Partiet, der skal køres. Bliver kørslens lot_no.")
+    item_no: str | None = None
+    variety: str | None = None
+    line: str | None = None
+    planned_kg: float | None = Field(
+        default=None,
+        description=(
+            "Kontorets tal. Det, der faktisk blev vejet ind, står på kørslen, "
+            "og de to er ikke det samme."
+        ),
+    )
+    note: str | None = None
+    created_at: datetime
+    created_by: str | None = None
+    cancelled_at: datetime | None = None
+    started_lot: str | None = Field(
+        default=None,
+        description=(
+            "Kørslen på ordren, hvis den er startet. Udledt og ikke gemt: en "
+            "status, der skal vedligeholdes to steder, kommer til at lyve."
+        ),
+    )
+    started_at: datetime | None = None
+
+
+class NewOrder(BaseModel):
+    """Ordrekontorets ende af snittet.
+
+    Indtil integrationen findes, oprettes ordrer gennem det samme kald, som
+    kontoret vil bruge. Så er der ingen bagdør at rydde op i bagefter.
+    """
+
+    order_no: str = Field(min_length=1, max_length=60)
+    lot_no: str = Field(min_length=1, max_length=60)
+    item_no: str | None = Field(default=None, max_length=60)
+    variety: str | None = Field(default=None, max_length=120)
+    line: str | None = Field(default=None, max_length=60)
+    planned_kg: float | None = Field(default=None, ge=0)
+    note: str | None = Field(default=None, max_length=500)
+    created_by: str | None = Field(default=None, max_length=80)
+
+
 class LotSummary(BaseModel):
     lot_no: str
     variety: str | None = None
@@ -402,45 +453,43 @@ class LotDetail(LotSummary):
 
 
 class NewLot(BaseModel):
-    """Oprettelsen af et lot.
+    """Start en kørsel på en ordre.
 
-    Kun lotnummeret er krævet. De øvrige stamdatafelter er markeret som
-    påkrævede i ``LotField``, men det gælder for det fuldstændige lot og ikke
-    for oprettelsen: en operatør, der skal have partiet i gang, kender ikke kg
-    ind endnu, og en formular, der spærrer, ender med at blive udfyldt med
-    gætterier. Hvad der mangler, står på lottet bagefter.
+    Ordren bestemmer partiet, varen og varieteten, så de felter står ikke her:
+    de kopieres fra ordren på serveren. Kunne klienten sende dem med, kunne den
+    også sende noget andet end det, kontoret har bestemt, og så står der to
+    forskellige svar på det samme spørgsmål.
+
+    Resten er operatørens, og kun ordrenummeret spærrer. Rapport nr. og kg ind
+    er markeret som påkrævede i ``LotField``, men det gælder for den
+    *fuldstændige* kørsel: den, der skal have partiet i gang, kender ikke kg
+    ind endnu, og en formular, der spærrer, bliver udfyldt med gætterier. Hvad
+    der mangler, står på kørslen bagefter.
     """
 
-    lot_no: str = Field(min_length=1, max_length=60)
-    variety: str | None = Field(default=None, max_length=120)
-    item_no: str | None = Field(default=None, max_length=60)
-    line: str | None = Field(default=None, max_length=60)
-    started_by: str | None = Field(default=None, max_length=80)
-    order_no: str | None = Field(default=None, max_length=60)
+    order_no: str = Field(min_length=1, max_length=60)
     report_no: str | None = Field(default=None, max_length=60)
     input_kg: float | None = Field(default=None, ge=0)
+    started_by: str | None = Field(default=None, max_length=80)
     ended_at: datetime | None = None
     note: str | None = Field(default=None, max_length=500)
 
 
 class LotUpdate(BaseModel):
-    """Rettelse af stamdata på et lot, der kører.
+    """Rettelse af det, operatøren har ansvar for.
 
-    Alt er valgfrit, og kun det, kaldet nævner, bliver rørt. Et lot får sine
+    Alt er valgfrit, og kun det, kaldet nævner, bliver rørt. En kørsel får sine
     oplysninger lidt ad gangen, så en formular, der sendte hele objektet, ville
     rydde det, den ikke kendte.
 
-    Lotnummer og starttidspunkt står ikke her. Det ene er nøglen, det andet er
-    systemets eget.
+    Ordrens felter står ikke her. Retter man varieteten på kørslen, men ikke på
+    ordren, står der to forskellige svar på det samme spørgsmål, og så er det
+    ordrekontoret, der skal rette ordren.
     """
 
-    variety: str | None = Field(default=None, max_length=120)
-    item_no: str | None = Field(default=None, max_length=60)
-    line: str | None = Field(default=None, max_length=60)
-    started_by: str | None = Field(default=None, max_length=80)
-    order_no: str | None = Field(default=None, max_length=60)
     report_no: str | None = Field(default=None, max_length=60)
     input_kg: float | None = Field(default=None, ge=0)
+    started_by: str | None = Field(default=None, max_length=80)
     ended_at: datetime | None = None
     note: str | None = Field(default=None, max_length=500)
 

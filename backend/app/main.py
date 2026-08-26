@@ -41,7 +41,9 @@ from .schemas import (
     SetupValue,
     MaintenanceReminder,
     NewLot,
+    NewOrder,
     NewSample,
+    Order,
     RecentScan,
     ScanCounts,
     DisplayDetail,
@@ -791,6 +793,99 @@ def _to_lot_summary(row) -> LotSummary:
     )
 
 
+def _to_order(row) -> Order:
+    return Order(
+        order_no=row["order_no"],
+        lot_no=row["lot_no"],
+        item_no=row["item_no"],
+        variety=row["variety"],
+        line=row["line"],
+        planned_kg=row["planned_kg"],
+        note=row["note"],
+        created_at=row["created_at"],
+        created_by=row["created_by"],
+        cancelled_at=row["cancelled_at"],
+        started_lot=row.get("started_lot"),
+        started_at=row.get("started_at"),
+    )
+
+
+@app.get("/api/orders", response_model=list[Order], tags=["orders"])
+def list_orders(open_only: bool = True, limit: int = 100) -> list[Order]:
+    """Ordrerne fra kontoret.
+
+    Som standard kun dem, der stadig er ledige. Det er den liste, operatøren
+    skal vælge i, og en ordre, der allerede kører, er ikke et valg.
+    """
+    return [
+        _to_order(row)
+        for row in db.list_orders(open_only=open_only, limit=min(limit, 500))
+    ]
+
+
+@app.post("/api/orders", response_model=Order, status_code=201, tags=["orders"])
+def create_order(order: NewOrder) -> Order:
+    """Ordrekontorets ende af snittet.
+
+    Indtil integrationen findes, oprettes ordrer gennem det her kald. Det er
+    med vilje det samme, kontoret vil bruge: en bagdør til at taste ordrer ind
+    ville skulle rives ned igen bagefter.
+    """
+    if db.get_order(order.order_no.strip()) is not None:
+        raise HTTPException(
+            status_code=409, detail=f"Ordre {order.order_no} findes allerede"
+        )
+    if db.get_lot(order.lot_no.strip()) is not None:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Lot {order.lot_no} er allerede kørt på en anden ordre",
+        )
+    return _to_order(
+        db.add_order(
+            order.order_no,
+            order.lot_no,
+            order.item_no,
+            order.variety,
+            order.line,
+            order.planned_kg,
+            order.note,
+            order.created_by,
+        )
+    )
+
+
+@app.get("/api/orders/{order_no}", response_model=Order, tags=["orders"])
+def get_order(order_no: str) -> Order:
+    row = db.get_order(order_no)
+    if row is None:
+        raise HTTPException(status_code=404, detail=f"Ordre {order_no} findes ikke")
+    return _to_order(row)
+
+
+@app.delete("/api/orders/{order_no}", response_model=Order, tags=["orders"])
+def cancel_order(order_no: str) -> Order:
+    """Træk ordren tilbage. Kun hvis den ikke er kørt.
+
+    Rækken slettes ikke. En ordre, der har kørt, skal kunne slås op bagefter,
+    og en ordre, der blev trukket tilbage, er også en oplysning.
+    """
+    row = db.cancel_order(order_no)
+    if row is None:
+        existing = db.get_order(order_no)
+        if existing is None:
+            raise HTTPException(
+                status_code=404, detail=f"Ordre {order_no} findes ikke"
+            )
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"Ordre {order_no} kan ikke trækkes tilbage. Den er enten "
+                "allerede trukket tilbage eller sat i gang på linjen."
+            ),
+        )
+    return _to_order(row)
+
+
 @app.get("/api/lots/meta", response_model=LotMeta, tags=["lots"])
 def lot_meta() -> LotMeta:
     """Domænet, som frontenden tegner skærmen ud fra.
@@ -946,9 +1041,32 @@ def list_lots(limit: int = 40) -> list[LotSummary]:
 
 @app.post("/api/lots", response_model=LotSummary, status_code=201, tags=["lots"])
 def create_lot(lot: NewLot) -> LotSummary:
-    if db.get_lot(lot.lot_no.strip()) is not None:
+    """Start en kørsel på en ordre.
+
+    Ordrens felter kopieres her og kommer ikke fra klienten. Kunne klienten
+    sende dem med, kunne den også sende noget andet end det, kontoret har
+    bestemt, og så står der to forskellige svar på det samme spørgsmål.
+    """
+    order = db.get_order(lot.order_no.strip())
+    if order is None:
         raise HTTPException(
-            status_code=409, detail=f"Lot {lot.lot_no} er allerede startet"
+            status_code=404, detail=f"Ordre {lot.order_no} findes ikke"
+        )
+    if order["cancelled_at"] is not None:
+        raise HTTPException(
+            status_code=409, detail=f"Ordre {lot.order_no} er trukket tilbage"
+        )
+    if order["started_lot"] is not None:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"Ordre {lot.order_no} kører allerede som lot "
+                f"{order['started_lot']}"
+            ),
+        )
+    if db.get_lot(order["lot_no"]) is not None:
+        raise HTTPException(
+            status_code=409, detail=f"Lot {order['lot_no']} er allerede startet"
         )
 
     # Kun felter, der står i LOT_FIELDS, når frem til en kolonne. Listen er
@@ -956,10 +1074,14 @@ def create_lot(lot: NewLot) -> LotSummary:
     # skrive udenom den.
     fields = {
         name: value
-        for name, value in lot.model_dump(exclude={"lot_no"}).items()
+        for name, value in lot.model_dump().items()
         if name in lots.EDITABLE_LOT_FIELDS
     }
-    return _to_lot_summary(db.add_lot(lot.lot_no, **fields))
+    for name in lots.ORDER_OWNED_FIELDS:
+        if name != "lot_no":
+            fields[name] = order[name] if name != "order_no" else order["order_no"]
+
+    return _to_lot_summary(db.add_lot(order["lot_no"], **fields))
 
 
 @app.patch("/api/lots/{lot_no}", response_model=LotSummary, tags=["lots"])
