@@ -31,6 +31,7 @@ import {
 } from "../lots";
 import { Icon } from "./Icon";
 import { Sparkline } from "./Sparkline";
+import { Stack } from "./Stack";
 
 const time = new Intl.DateTimeFormat("da-DK", {
   hour: "2-digit",
@@ -95,7 +96,18 @@ export function ProcessCard({
   const pending = unacknowledged(lot.samples, process.id, selected);
 
   const primary = testType?.metrics.find((m) => m.primary);
-  const rest = testType?.metrics.filter((m) => !m.primary) ?? [];
+
+  // De ordnede fordelinger står som stablet søjle under hovedtallet, ikke som
+  // rækker. Uden den opdeling blandede kortet FV1, FV2 og FV3 ind mellem
+  // klasserne, som var de det samme slags tal.
+  const ordinal = testType?.groups.filter((g) => g.scale === "ordinal") ?? [];
+  const ordinalIds = new Set(
+    ordinal.flatMap((g) =>
+      (testType?.metrics ?? []).filter((m) => m.group === g.id).map((m) => m.id),
+    ),
+  );
+  const rest =
+    testType?.metrics.filter((m) => !m.primary && !ordinalIds.has(m.id)) ?? [];
 
   return (
     <article
@@ -177,17 +189,37 @@ export function ProcessCard({
             <span>{time.format(new Date(latest.taken_at))}</span>
           </p>
 
-          {primary && (
-            <div className="process__primary">
-              <span className="process__value">
-                {formatMetric(latest.metrics[primary.id], primary.unit)}
-              </span>
-              <span className="process__metric-name">{primary.label}</span>
-              <DeltaTag
-                delta={deltaFor(primary, latest, previous, thresholds)}
-              />
-            </div>
-          )}
+          {/* Hovedtal og kvalitet i ét element. Kortet arver kædens rækker, så
+              antallet af børn skal være det samme på alle tre kort: lægger man
+              et ekstra ind, skubbes foden op oven i tabellen. */}
+          <div className="process__lead">
+            {primary && (
+              <div className="process__primary">
+                <span className="process__value">
+                  {formatMetric(latest.metrics[primary.id], primary.unit)}
+                </span>
+                <span className="process__metric-name">{primary.label}</span>
+                <DeltaTag
+                  delta={deltaFor(primary, latest, previous, thresholds)}
+                />
+              </div>
+            )}
+
+            {/* Kvaliteten lige under hovedtallet. FV er kvaliteten af netop de
+                frø, Monogerm tæller, så de to hører sammen. */}
+            {ordinal.map((group) => (
+              <div className="process__quality" key={group.id}>
+                <Stack
+                  metrics={testType!.metrics.filter((m) => m.group === group.id)}
+                  sample={latest}
+                  legend={false}
+                />
+                <p className="process__quality-key">
+                  {group.label} · bedst til venstre
+                </p>
+              </div>
+            ))}
+          </div>
 
           {rest.length > 0 && (
             <ul className="process__metrics">

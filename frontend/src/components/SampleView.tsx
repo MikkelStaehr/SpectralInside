@@ -157,6 +157,11 @@ export function SampleView({ sampleId, onBack }: Props) {
             scale: "nominal",
           },
         ];
+  // De ordnede fordelinger vises under hovedtallet, de nominelle i paneler
+  // nedenunder. De to slags data skal tegnes hver sin måde, se Stack.tsx.
+  const ordinal = groups.filter((g) => g.scale === "ordinal");
+  const nominal = groups.filter((g) => g.scale !== "ordinal");
+
   const primaryDelta = primary
     ? deltaFor(primary, sample, previous, thresholds)
     : null;
@@ -223,38 +228,55 @@ export function SampleView({ sampleId, onBack }: Props) {
           tabellen nedenfor, ville Sugarbeet med sine 97 % desuden gøre alle de
           andres spor til en streg ved nul. */}
       {primary && (
-        <section className="sampleview__hero">
-          <span className="sampleview__hero-value">
-            {formatMetric(sample.metrics[primary.id], primary.unit)}
-          </span>
-          <span className="sampleview__hero-label">{primary.label}</span>
-          {primaryDelta ? (
-            <span className={deltaClass(primaryDelta)}>
-              <Icon
-                name={
-                  primaryDelta.direction === "flat"
-                    ? "minus"
-                    : primaryDelta.direction === "up"
-                      ? "arrow-up"
-                      : "arrow-down"
-                }
-                size={17}
-                strokeWidth={2.6}
-              />
-              {formatDelta(primaryDelta)}
+        <section className="sampleview__lead">
+          <p className="sampleview__hero">
+            <span className="sampleview__hero-value">
+              {formatMetric(sample.metrics[primary.id], primary.unit)}
             </span>
-          ) : (
-            <span className="delta delta--none">første prøve i trinnet</span>
-          )}
+            <span className="sampleview__hero-label">{primary.label}</span>
+            {primaryDelta ? (
+              <span className={deltaClass(primaryDelta)}>
+                <Icon
+                  name={
+                    primaryDelta.direction === "flat"
+                      ? "minus"
+                      : primaryDelta.direction === "up"
+                        ? "arrow-up"
+                        : "arrow-down"
+                  }
+                  size={17}
+                  strokeWidth={2.6}
+                />
+                {formatDelta(primaryDelta)}
+              </span>
+            ) : (
+              <span className="delta delta--none">første prøve i trinnet</span>
+            )}
+          </p>
+
+          {/* De ordnede fordelinger står her, lige under hovedtallet, og ikke
+              i et panel for sig. FV er kvaliteten af netop de frø, Monogerm
+              tæller, så de to hører sammen og skal læses i ét blik. */}
+          {testType &&
+            ordinal.map((group) => (
+              <div className="sampleview__quality" key={group.id}>
+                <p className="sampleview__quality-head">
+                  {group.label}
+                  {group.lead && <span>{group.lead}</span>}
+                </p>
+                <Stack
+                  metrics={testType.metrics.filter((m) => m.group === group.id)}
+                  sample={sample}
+                />
+              </div>
+            ))}
         </section>
       )}
 
-      {/* En testtype kan bære mere end én fordeling. En CT-scanning giver to
-          af den samme måling: hvad frøet er, og hvor godt det er. De får hver
-          sit panel, for de svarer på hvert sit spørgsmål og skal tegnes hver
-          sin måde: nominelle klasser som søjler på fælles akse, den ordnede
-          FV-skala som én stablet søjle. */}
-      {testType && groups.map((group) => {
+      {/* De nominelle fordelinger. En CT-scanning giver to fordelinger af den
+          samme måling, og de skal tegnes hver sin måde: de ordnede står under
+          hovedtallet ovenfor, de nominelle som søjler på fælles akse her. */}
+      {testType && nominal.map((group) => {
         // Metrikker uden gruppe hoerer til den syntetiske gruppe med tom id.
         const inGroup = testType.metrics.filter(
           (m) => (m.group ?? "") === group.id,
@@ -270,31 +292,23 @@ export function SampleView({ sampleId, onBack }: Props) {
               {group.lead && <p className="panel__sub">{group.lead}</p>}
             </header>
 
-            {group.scale === "ordinal" ? (
-              <div className="sampleview__stack">
-                <Stack metrics={inGroup} sample={sample} />
-              </div>
-            ) : (
-              <MetricTable
-                metrics={inGroup.filter((m) => !m.primary)}
-                current={sample}
-                earlier={earlier}
-                thresholds={thresholds}
-              />
-            )}
+            <MetricTable
+              metrics={inGroup.filter((m) => !m.primary)}
+              current={sample}
+              earlier={earlier}
+              thresholds={thresholds}
+            />
 
             {/* Hovedtallet for gruppen er allerede vist stort, hvis det er
                 testtypens første. De øvrige grupper har deres eget. */}
-            {group.scale !== "ordinal" &&
-              groupPrimary &&
-              groupPrimary.id !== primary?.id && (
-                <p className="sampleview__group-primary">
-                  {groupPrimary.label}{" "}
-                  <strong>
-                    {formatMetric(sample.metrics[groupPrimary.id], groupPrimary.unit)}
-                  </strong>
-                </p>
-              )}
+            {groupPrimary && groupPrimary.id !== primary?.id && (
+              <p className="sampleview__group-primary">
+                {groupPrimary.label}{" "}
+                <strong>
+                  {formatMetric(sample.metrics[groupPrimary.id], groupPrimary.unit)}
+                </strong>
+              </p>
+            )}
           </section>
         );
       })}

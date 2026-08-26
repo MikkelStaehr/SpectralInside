@@ -3806,8 +3806,62 @@ p:last-child {
    kuloer fra lys til moerk i skalaens egen raekkefoelge: jo mere lyst, jo
    bedre er froeet. Se kommentaren i Stack.tsx. */
 
-.sampleview__stack {
-  padding: 24px;
+/* Kvaliteten lige under hovedtallet, ikke i et panel for sig. FV er
+   kvaliteten af netop de froe, Monogerm taeller, saa de to laeses i ét blik. */
+.sampleview__lead {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+
+/* Fuld bredde som panelet nedenunder. En smallere soejle ser tilfaeldig ud,
+   og pladsen kommer de smaa trin til gode: FV3 paa 5 % skal kunne ses. */
+.sampleview__quality {
+  width: 100%;
+}
+
+.sampleview__quality-head {
+  margin: 0 0 12px;
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  flex-wrap: wrap;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.sampleview__quality-head span {
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+  font-size: 15px;
+}
+
+/* Hovedtal og kvalitet i ét element, saa kortet beholder det antal boern,
+   kaedens raekker forventer. */
+.process__lead {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* Paa proceskortet er der ikke plads til en signatur under soejlen. Rammen er
+   smal, saa stablen staar alene med én linje under. */
+.process__quality {
+  margin-top: 2px;
+}
+
+.process__quality .stack__bar {
+  height: 20px;
+}
+
+.process__quality-key {
+  margin: 7px 0 0;
+  font-size: 13px;
+  color: var(--text-muted);
 }
 
 .stack__bar {
