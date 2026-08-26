@@ -213,10 +213,21 @@ CREATE TABLE IF NOT EXISTS lot_samples (
     -- svar til den der taster forkert. Her staar den, fordi den skal gaelde
     -- ogsaa for den der skriver udenom API'et.
     CONSTRAINT lot_samples_scope CHECK (
-        (process = 'pre_cleaning'  AND test_type = 'purity')
-        OR (process = 'cleaning'     AND test_type = 'cleaning_damage')
-        OR (process = 'post_cleaning' AND test_type IN ('purity', 'cleaning_damage'))
+        (process = 'pre_cleaning'   AND test_type IN ('purity', 'ct'))
+        OR (process = 'cleaning'      AND test_type IN ('cleaning_damage', 'ct'))
+        OR (process = 'post_cleaning' AND test_type IN ('purity', 'cleaning_damage', 'ct'))
     )
+);
+
+-- Constrainten skal opdateres paa databaser, der blev lagt op foer CT fandtes.
+-- CREATE TABLE IF NOT EXISTS roerer ikke en tabel, der allerede er der, saa
+-- reglen ovenfor gaelder kun nye. Drop foerst, tilfoej saa: parret kan koeres
+-- igen og igen, hvor et bart ADD CONSTRAINT ville fejle anden gang.
+ALTER TABLE lot_samples DROP CONSTRAINT IF EXISTS lot_samples_scope;
+ALTER TABLE lot_samples ADD CONSTRAINT lot_samples_scope CHECK (
+    (process = 'pre_cleaning'   AND test_type IN ('purity', 'ct'))
+    OR (process = 'cleaning'      AND test_type IN ('cleaning_damage', 'ct'))
+    OR (process = 'post_cleaning' AND test_type IN ('purity', 'cleaning_damage', 'ct'))
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_lot_samples_seq

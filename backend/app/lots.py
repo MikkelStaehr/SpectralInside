@@ -21,8 +21,31 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 ProcessId = Literal["pre_cleaning", "cleaning", "post_cleaning"]
-TestTypeId = Literal["purity", "cleaning_damage"]
+TestTypeId = Literal["purity", "cleaning_damage", "ct"]
 StampId = Literal["approved", "rejected"]
+
+
+class MetricGroup(BaseModel):
+    """En fordeling inden for en testtype.
+
+    Findes, fordi en CT-scanning giver **to** fordelinger af én måling: de seks
+    klasser og de fire FV-trin. Uden grupper skulle vi lave to prøver ud af én
+    scanning, og det ville være en løgn om, hvad der faktisk skete.
+    """
+
+    id: str
+    label: str
+    lead: str = ""
+    scale: Literal["nominal", "ordinal"] = Field(
+        default="nominal",
+        description=(
+            "Nominal: klasserne har ingen indbyrdes rækkefølge, Koriander er "
+            "ikke 'mere' end Katost. Ordinal: de er ordnede, FV1 er dårligere "
+            "end FV0 og bedre end FV2. Det afgør, hvordan de tegnes: nominelle "
+            "som søjler på fælles akse, ordinale som én stablet søjle i én "
+            "kulør fra lys til mørk."
+        ),
+    )
 
 
 class Metric(BaseModel):
@@ -31,7 +54,14 @@ class Metric(BaseModel):
     unit: str = "%"
     primary: bool = Field(
         default=False,
-        description="Tallet der sættes stort på skærmen. Præcis ét pr. testtype.",
+        description=(
+            "Tallet der sættes stort på skærmen. Præcis ét pr. gruppe, så en "
+            "testtype med to fordelinger har to hovedtal."
+        ),
+    )
+    group: str | None = Field(
+        default=None,
+        description="Hvilken fordeling metrikken hører til. Null når testtypen kun har én.",
     )
     better: Literal["higher", "lower"] = Field(
         description=(
@@ -53,7 +83,9 @@ class Metric(BaseModel):
 class TestType(BaseModel):
     id: TestTypeId
     label: str
+    lead: str = ""
     metrics: list[Metric]
+    groups: list[MetricGroup] = []
 
 
 class Process(BaseModel):
@@ -139,6 +171,77 @@ TEST_TYPES: dict[str, TestType] = {
             Metric(id="decapped", label="Decapped", better="lower"),
         ],
     ),
+    # CT-scanningen. Videometer svarer "hvor meget af det her er roefrø, og har
+    # vi ødelagt noget undervejs". CT svarer på noget andet: af det, der er
+    # tilbage, hvor godt er det. Prøven tages de samme steder på linjen, det er
+    # kun formålet, der er et andet.
+    #
+    # To fordelinger af én scanning, se MetricGroup:
+    #
+    #   klasser  hvad frøet er. Nominelle, ingen indbyrdes rækkefølge.
+    #   fv       Free Volume pr. frø, FV0 til FV3. Ordnede, lavere er bedre.
+    "ct": TestType(
+        id="ct",
+        label="CT",
+        lead="Hvad der er tilbage, og hvor godt det er.",
+        groups=[
+            MetricGroup(
+                id="classes",
+                label="Hvad frøet er",
+                scale="nominal",
+            ),
+            MetricGroup(
+                id="fv",
+                label="Free Volume",
+                lead="Kvaliteten af det enkelte frø. Lavere er bedre.",
+                scale="ordinal",
+            ),
+        ],
+        metrics=[
+            # Sukkerroer er forædlet til at være monogerme: ét frø skal give én
+            # plante. Alt flerkimet kræver udtynding og er derfor ikke det, der
+            # sælges.
+            Metric(
+                id="monogerm",
+                label="Monogerm",
+                group="classes",
+                primary=True,
+                better="higher",
+            ),
+            Metric(id="twin", label="Twin", group="classes", better="lower"),
+            # BIGH har én embryo og én kim, så den spirer som en monogerm, selv
+            # om strukturen er bigerm. Om den tæller som defekt eller som
+            # acceptabel afhænger af, hvad kunden køber. Sat konservativt til
+            # "lavere er bedre" indtil det er afklaret.
+            Metric(
+                id="bigh",
+                label="BIGH",
+                group="classes",
+                better="lower",
+                source_class="BIGH",
+            ),
+            Metric(
+                id="bigf",
+                label="BIGF",
+                group="classes",
+                better="lower",
+                source_class="BIGF",
+            ),
+            # Det samme som Foreign hos Videometer, målt af et andet
+            # instrument. To uafhængige tal for den samme ting, se README.
+            Metric(id="nots", label="NOTS", group="classes", better="lower"),
+            Metric(id="empty", label="Empty", group="classes", better="lower"),
+            # FV er pr. frø, så en prøve giver en fordeling over de fire trin,
+            # der summer til 100. FV0 er hovedtallet: andelen i bedste
+            # kvalitetsklasse er et rigtigt tal med en nævner, hvor et vægtet
+            # gennemsnit af 0, 1, 2 og 3 ville være et konstrueret tal på en
+            # ordinalskala.
+            Metric(id="fv0", label="FV0", group="fv", primary=True, better="higher"),
+            Metric(id="fv1", label="FV1", group="fv", better="lower"),
+            Metric(id="fv2", label="FV2", group="fv", better="lower"),
+            Metric(id="fv3", label="FV3", group="fv", better="lower"),
+        ],
+    ),
 }
 
 
@@ -148,14 +251,22 @@ TEST_TYPES: dict[str, TestType] = {
 # Processerne har ikke en forklarende undertekst. Operatøren ved godt, hvad
 # der sker i Cleaning, hun står ved maskinen, og en linje der forklarer det
 # koster plads på hvert eneste kort hele dagen.
+#
+# CT tages de samme steder som Videometer-prøverne, så den ligger på alle tre
+# trin. Det er kun formålet, der er et andet: Videometer siger hvad der er i
+# lottet og om vi har ødelagt noget, CT siger hvor godt det er, der er tilbage.
 PROCESSES: list[Process] = [
-    Process(id="pre_cleaning", step=1, label="Pre Cleaning", test_types=["purity"]),
-    Process(id="cleaning", step=2, label="Cleaning", test_types=["cleaning_damage"]),
+    Process(
+        id="pre_cleaning", step=1, label="Pre Cleaning", test_types=["purity", "ct"]
+    ),
+    Process(
+        id="cleaning", step=2, label="Cleaning", test_types=["cleaning_damage", "ct"]
+    ),
     Process(
         id="post_cleaning",
         step=3,
         label="Post Cleaning",
-        test_types=["purity", "cleaning_damage"],
+        test_types=["purity", "cleaning_damage", "ct"],
         stamp=True,
     ),
 ]
@@ -188,4 +299,15 @@ def metric_ids(test_type_id: str) -> set[str]:
 
 
 def primary_metric(test_type_id: str) -> Metric | None:
+    """Testtypens første hovedtal.
+
+    En testtype med to fordelinger har ét hovedtal pr. gruppe. Den her giver
+    det første, altså det der står øverst, og det er stadig det rigtige svar
+    for de testtyper, der kun har én fordeling.
+    """
     return next((m for m in metrics_for(test_type_id) if m.primary), None)
+
+
+def groups_for(test_type_id: str) -> list[MetricGroup]:
+    test_type = TEST_TYPES.get(test_type_id)
+    return list(test_type.groups) if test_type else []

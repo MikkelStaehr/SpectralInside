@@ -193,8 +193,24 @@ export interface ConfusionMatrix {
 // fra /api/lots/meta, så det kun findes ét sted.
 
 export type ProcessId = "pre_cleaning" | "cleaning" | "post_cleaning";
-export type TestTypeId = "purity" | "cleaning_damage";
+export type TestTypeId = "purity" | "cleaning_damage" | "ct";
 export type StampId = "approved" | "rejected";
+
+/**
+ * En fordeling inden for en testtype. En CT-scanning giver to af én måling:
+ * de seks klasser og de fire FV-trin.
+ *
+ * `scale` afgør, hvordan gruppen tegnes. Nominal betyder at klasserne ikke har
+ * nogen indbyrdes rækkefølge, og så er de søjler på en fælles akse. Ordinal
+ * betyder at de er ordnede, FV1 er dårligere end FV0, og så er de én stablet
+ * søjle i én kulør fra lys til mørk.
+ */
+export interface MetricGroup {
+  id: string;
+  label: string;
+  lead: string;
+  scale: "nominal" | "ordinal";
+}
 
 export interface Metric {
   id: string;
@@ -202,8 +218,10 @@ export interface Metric {
   unit: string;
   primary: boolean;
   better: "higher" | "lower";
-  /** Klassens navn i VideometerLabs egen model. Null for metrikker uden klasse. */
+  /** Klassens navn i instrumentets egen model. Null for metrikker uden klasse. */
   source_class: string | null;
+  /** Hvilken fordeling metrikken hører til. Null når testtypen kun har én. */
+  group: string | null;
 }
 
 // Opsætningen af linjen. Hvilke indstillinger der findes, kommer fra
@@ -245,7 +263,9 @@ export interface LotSetup {
 export interface TestType {
   id: TestTypeId;
   label: string;
+  lead: string;
   metrics: Metric[];
+  groups: MetricGroup[];
 }
 
 export interface Process {

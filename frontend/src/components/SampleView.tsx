@@ -15,7 +15,14 @@
 
 import { useEffect, useState } from "react";
 import { api } from "../api";
-import type { BlobRow, LotDetail, LotMeta, LotSample, ScanSummary } from "../types";
+import type {
+  BlobRow,
+  LotDetail,
+  LotMeta,
+  LotSample,
+  MetricGroup,
+  ScanSummary,
+} from "../types";
 import {
   deltaClass,
   deltaFor,
@@ -27,6 +34,7 @@ import {
 } from "../lots";
 import { Icon } from "./Icon";
 import { MetricTable } from "./MetricTable";
+import { Stack } from "./Stack";
 import { SeedView } from "./SeedView";
 import { Trend } from "./Trend";
 
@@ -135,14 +143,30 @@ export function SampleView({ sampleId, onBack }: Props) {
     flat: meta.flat_threshold,
     relative: meta.relative_threshold,
   };
+
+  // Testtyper uden grupper har én fordeling. Den får en syntetisk gruppe, så
+  // visningen nedenfor kun har ét tilfælde at forholde sig til.
+  const groups: MetricGroup[] =
+    testType && testType.groups.length > 0
+      ? testType.groups
+      : [
+          {
+            id: "",
+            label: `Alt andet end ${primary?.label ?? "hovedtallet"}`,
+            lead: "",
+            scale: "nominal",
+          },
+        ];
   const primaryDelta = primary
     ? deltaFor(primary, sample, previous, thresholds)
     : null;
+
   // Alle prøver i det trin, prøven hører til. Grundlaget under udviklingen.
   const stepSamples = lot
     ? samplesIn(lot.samples, sample.process, sample.test_type)
     : [];
   const total = stepSamples.length || sample.seq;
+  const earlier = stepSamples.filter((s) => s.seq < sample.seq);
 
   return (
     <div className="monitor sampleview">
@@ -225,24 +249,55 @@ export function SampleView({ sampleId, onBack }: Props) {
         </section>
       )}
 
-      {testType && (
-        <section className="panel">
-          {/* .panel er en skal uden indvendig plads. Overskriften hører hjemme
-              i .panel__head, ellers lander den på kanten. */}
-          <header className="panel__head">
-            <h2>De øvrige klasser</h2>
-            <p className="panel__sub">
-              Alt andet end {primary?.label ?? "hovedtallet"}.
-            </p>
-          </header>
-          <MetricTable
-            metrics={testType.metrics.filter((m) => !m.primary)}
-            current={sample}
-            earlier={stepSamples.filter((s) => s.seq < sample.seq)}
-            thresholds={thresholds}
-          />
-        </section>
-      )}
+      {/* En testtype kan bære mere end én fordeling. En CT-scanning giver to
+          af den samme måling: hvad frøet er, og hvor godt det er. De får hver
+          sit panel, for de svarer på hvert sit spørgsmål og skal tegnes hver
+          sin måde: nominelle klasser som søjler på fælles akse, den ordnede
+          FV-skala som én stablet søjle. */}
+      {testType && groups.map((group) => {
+        // Metrikker uden gruppe hoerer til den syntetiske gruppe med tom id.
+        const inGroup = testType.metrics.filter(
+          (m) => (m.group ?? "") === group.id,
+        );
+        const groupPrimary = inGroup.find((m) => m.primary);
+
+        return (
+          <section className="panel" key={group.id ?? "alle"}>
+            {/* .panel er en skal uden indvendig plads. Overskriften hører
+                hjemme i .panel__head, ellers lander den på kanten. */}
+            <header className="panel__head">
+              <h2>{group.label}</h2>
+              {group.lead && <p className="panel__sub">{group.lead}</p>}
+            </header>
+
+            {group.scale === "ordinal" ? (
+              <div className="sampleview__stack">
+                <Stack metrics={inGroup} sample={sample} />
+              </div>
+            ) : (
+              <MetricTable
+                metrics={inGroup.filter((m) => !m.primary)}
+                current={sample}
+                earlier={earlier}
+                thresholds={thresholds}
+              />
+            )}
+
+            {/* Hovedtallet for gruppen er allerede vist stort, hvis det er
+                testtypens første. De øvrige grupper har deres eget. */}
+            {group.scale !== "ordinal" &&
+              groupPrimary &&
+              groupPrimary.id !== primary?.id && (
+                <p className="sampleview__group-primary">
+                  {groupPrimary.label}{" "}
+                  <strong>
+                    {formatMetric(sample.metrics[groupPrimary.id], groupPrimary.unit)}
+                  </strong>
+                </p>
+              )}
+          </section>
+        );
+      })}
 
       {/* Tabellen ovenfor svarer på hvor stor hver klasse er, med fælles akse.
           Den her svarer på hvilken vej den går, og det er et spørgsmål pr.
@@ -267,6 +322,10 @@ export function SampleView({ sampleId, onBack }: Props) {
         </section>
       )}
 
+      {/* Kun for Videometer-prøver. scan_id peger på en blob-samling fra
+          VideometerLab, og en CT-scanning har ingen. Billeder fra CT ville
+          skulle hentes ad en anden vej og med sin egen visning. */}
+      {sample.test_type !== "ct" && (
       <section className="panel">
         <header className="panel__head">
           <h2>Billeder fra VideometerLab</h2>
@@ -335,6 +394,7 @@ export function SampleView({ sampleId, onBack }: Props) {
         )}
         </div>
       </section>
+      )}
 
       {blobs && open !== null && blobs[open] && sample.scan_id && (
         <SeedView

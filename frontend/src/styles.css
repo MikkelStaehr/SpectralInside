@@ -3801,6 +3801,77 @@ p:last-child {
   margin-left: 7px;
 }
 
+/* --- Ordnet fordeling, én stablet soejle ----------------------------------- */
+/* FV0 til FV3 er trin og ikke kategorier, saa de har ikke hver sin farve. Én
+   kuloer fra lys til moerk i skalaens egen raekkefoelge: jo mere lyst, jo
+   bedre er froeet. Se kommentaren i Stack.tsx. */
+
+.sampleview__stack {
+  padding: 24px;
+}
+
+.stack__bar {
+  display: flex;
+  height: 34px;
+  gap: 2px;
+  background: var(--surface-2);
+}
+
+/* Fuge og ikke kant. En kant om hvert felt ville laegge en streg oven i den
+   skala, felterne selv udgoer. */
+.stack__part {
+  background: var(--link);
+  min-width: 2px;
+}
+
+.stack__key {
+  list-style: none;
+  margin: 18px 0 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 32px;
+}
+
+.stack__key li {
+  display: flex;
+  align-items: baseline;
+  gap: 9px;
+  font-size: 15px;
+}
+
+.stack__swatch {
+  width: 11px;
+  height: 11px;
+  background: var(--link);
+  flex: none;
+  align-self: center;
+}
+
+.stack__name {
+  color: var(--text-muted);
+}
+
+.stack__key strong {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.sampleview__group-primary {
+  margin: 0;
+  padding: 0 24px 22px;
+  font-size: 17px;
+  color: var(--text-muted);
+}
+
+.sampleview__group-primary strong {
+  font-size: 21px;
+  font-weight: 600;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  margin-left: 6px;
+}
+
 /* --- Dialog ---------------------------------------------------------------- */
 /* Hedder sheet og ikke modal med vilje. Guide-popup'en til daglig opstart
    aeger allerede .modal, .modal__head, .modal__body, .modal__foot og
