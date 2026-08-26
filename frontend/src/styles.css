@@ -2781,12 +2781,13 @@ p:last-child {
    kort sig selv, og saa staar overskrift, hovedtal og tabel i trappe hen over
    de tre trin, fordi Post Cleaning har en fanerraekke mere.
 
-   De syv raekker er: overskrift, faner, hvilken proeve, hovedtal, tabel,
-   knapper, stempel. */
+   De fem baand er: overskrift, hovedtal med kvalitet, faner, tabel, fod.
+   Hovedtallet ligger over fanerne, fordi det er det, der traeffes beslutning
+   paa. Fanerne er vejen ned i detaljen. */
 .chain {
   display: grid;
   grid-template-columns: 1fr auto 1fr auto 1fr;
-  grid-template-rows: repeat(6, auto);
+  grid-template-rows: repeat(5, auto);
   row-gap: 14px;
   column-gap: 0;
 }
@@ -2954,37 +2955,69 @@ p:last-child {
   color: var(--danger-fg);
 }
 
-.process__which {
-  margin: 0;
-  font-size: 15px;
-  color: var(--text-muted);
+/* To noegletal side om side. Det venstre foelger fanen, det hoejre er
+   kvaliteten og staar fast. Skillestregen goer, at de laeses som to svar og
+   ikke som ét tal med et vedhaeng. */
+.process__keys {
+  display: flex;
+}
+
+/* Luften ligger som polstring i begge celler og ikke som gap. Betalte kun den
+   hoejre for skillestregen, blev den smallere end den venstre, og saa braekkede
+   dens pil ned paa en linje for sig, mens naboens blev staaende. */
+.process__key {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.process__key:not(:last-child) {
+  padding-right: 20px;
+}
+
+.process__key + .process__key {
+  border-left: 1px solid var(--border);
+  padding-left: 20px;
+}
+
+.process__key-head {
+  margin: 0 0 6px;
   display: flex;
   justify-content: space-between;
+  align-items: baseline;
   gap: 10px;
+  font-size: 13px;
+  color: var(--text-muted);
 }
 
-.process__which span {
+.process__key-head span:first-child {
+  color: var(--text);
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.process__key-head span + span {
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
-.process__primary {
+.process__key-value {
+  margin: 0;
   display: flex;
   align-items: baseline;
   flex-wrap: wrap;
-  gap: 6px 12px;
+  gap: 4px 10px;
 }
 
+/* 34 og ikke 46. To tal ved siden af hinanden i 46 px sprænger kortet, og de
+   staar alligevel oeverst paa en flade, hvor der ellers ikke er noget stort. */
 .process__value {
-  font-size: 46px;
+  font-size: 34px;
   font-weight: 600;
   letter-spacing: -0.03em;
   font-variant-numeric: tabular-nums;
   line-height: 1.05;
-}
-
-.process__metric-name {
-  font-size: 17px;
-  color: var(--text-muted);
 }
 
 .process__metrics {
@@ -3029,13 +3062,12 @@ p:last-child {
   justify-content: flex-end;
 }
 
-/* Optager de tre baand, et kort med en proeve bruger til hvilken proeve,
-   hovedtal og tabel, saa knapperne nedenunder stadig staar i linje. */
+/* Staar i tabelbaandet og traeder i stedet for tabellen. Baandene ovenfor er
+   der stadig, saa knapperne nedenunder bliver i linje med de andre korts. */
 .process__empty {
   margin: 0;
   font-size: 17px;
   color: var(--text-muted);
-  grid-row: 3 / 6;
 }
 
 /* Sidste baand, bundstillet. Uden det staar knappen midt i kortet, fordi
@@ -3840,8 +3872,8 @@ p:last-child {
   font-size: 15px;
 }
 
-/* Hovedtal og kvalitet i ét element, saa kortet beholder det antal boern,
-   kaedens raekker forventer. */
+/* Proeve, hovedtal og kvalitet i ét baand. De tre laeses som én saetning: hvad
+   der blev maalt, hvad det viste, og hvor gode froeene er. */
 .process__lead {
   display: flex;
   flex-direction: column;
@@ -3849,20 +3881,16 @@ p:last-child {
 }
 
 /* Paa proceskortet er der ikke plads til en signatur under soejlen. Rammen er
-   smal, saa stablen staar alene med én linje under. */
+   smal, saa stablen staar alene med to linjer under. */
 .process__quality {
-  margin-top: 2px;
+  margin-top: 4px;
 }
 
+/* Hoej nok til at baere tallet. Under det klemmer 13 px skrift mod fugerne. */
 .process__quality .stack__bar {
-  height: 20px;
+  height: 26px;
 }
 
-.process__quality-key {
-  margin: 7px 0 0;
-  font-size: 13px;
-  color: var(--text-muted);
-}
 
 .stack__bar {
   display: flex;
@@ -3874,29 +3902,74 @@ p:last-child {
 /* Fuge og ikke kant. En kant om hvert felt ville laegge en streg oven i den
    skala, felterne selv udgoer. */
 .stack__part {
-  background: var(--link);
+  position: relative;
   min-width: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
 }
 
-.stack__key {
+/* Fyldet for sig. Laa gennemsigtigheden paa feltet, ville den ogsaa blegne
+   tallet, og de lyse trin ville miste deres tal helt. */
+.stack__fill {
+  position: absolute;
+  inset: 0;
+  background: var(--link);
+}
+
+.stack__inline {
+  position: relative;
+  font-size: 13px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  color: var(--text);
+}
+
+.stack__inline--light {
+  color: #ffffff;
+}
+
+/* Én linje under soejlen: hvad skalaen betyder til venstre, og de trin der var
+   for smalle til deres eget tal til hoejre. To linjer ville goere en enkelt
+   figur til et afsnit. */
+.stack__foot {
+  margin-top: 9px;
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 6px 20px;
+}
+
+.stack__note {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+/* At de smalle trin er smalle er hele pointen med maalet, saa de faar en plads
+   ved siden af soejlen frem for en klemt label inde i den. */
+.stack__rest {
   list-style: none;
-  margin: 18px 0 0;
+  margin: 0;
   padding: 0;
   display: flex;
   flex-wrap: wrap;
-  gap: 10px 32px;
+  gap: 6px 20px;
 }
 
-.stack__key li {
+.stack__rest li {
   display: flex;
   align-items: baseline;
-  gap: 9px;
-  font-size: 15px;
+  gap: 8px;
+  font-size: 13px;
 }
 
 .stack__swatch {
-  width: 11px;
-  height: 11px;
+  width: 10px;
+  height: 10px;
   background: var(--link);
   flex: none;
   align-self: center;
@@ -3906,7 +3979,7 @@ p:last-child {
   color: var(--text-muted);
 }
 
-.stack__key strong {
+.stack__rest strong {
   font-weight: 600;
   font-variant-numeric: tabular-nums;
 }

@@ -14,6 +14,7 @@
 import type {
   LotDetail,
   LotSample,
+  Metric,
   Process,
   StampId,
   TestType,
@@ -100,14 +101,64 @@ export function ProcessCard({
   // De ordnede fordelinger står som stablet søjle under hovedtallet, ikke som
   // rækker. Uden den opdeling blandede kortet FV1, FV2 og FV3 ind mellem
   // klasserne, som var de det samme slags tal.
-  const ordinal = testType?.groups.filter((g) => g.scale === "ordinal") ?? [];
   const ordinalIds = new Set(
-    ordinal.flatMap((g) =>
-      (testType?.metrics ?? []).filter((m) => m.group === g.id).map((m) => m.id),
-    ),
+    (testType?.groups ?? [])
+      .filter((g) => g.scale === "ordinal")
+      .flatMap((g) =>
+        (testType?.metrics ?? [])
+          .filter((m) => m.group === g.id)
+          .map((m) => m.id),
+      ),
   );
   const rest =
     testType?.metrics.filter((m) => !m.primary && !ordinalIds.has(m.id)) ?? [];
+
+  // Kvaliteten hænger ikke på fanen. FV fortæller, hvor gode de frø er, der
+  // kører netop nu, og det er den beslutning, operatøren står med uanset om
+  // hun kigger på renhed eller på skader. Derfor står søjlen fast øverst og
+  // hentes fra sin egen prøve, ikke fra den valgte fane.
+  //
+  // Hvilken testtype der bærer den, udledes af skalaen. Kortet skal ikke vide,
+  // at gruppen hedder "fv", eller at testtypen hedder "ct".
+  const qualityId = process.test_types.find((id) =>
+    testTypes[id]?.groups.some((g) => g.scale === "ordinal"),
+  );
+  const qualityType = qualityId ? testTypes[qualityId] : undefined;
+  const qualityGroup = qualityType?.groups.find((g) => g.scale === "ordinal");
+  const qualityScope = qualityId
+    ? samplesIn(lot.samples, process.id, qualityId)
+    : [];
+  const qualitySample = qualityScope[qualityScope.length - 1];
+
+  // To nøgletal, aldrig tre. Det venstre følger fanen, det højre står fast, og
+  // begge har deres pil: andelen af monogerm skal kunne følges, uden at man
+  // først skal klikke sig ind på CT-fanen.
+  //
+  // Står CT-fanen selv for det venstre tal, er de to det samme, og så vises
+  // det kun én gang. To ens tal ved siden af hinanden er ikke to nøgletal.
+  const keys: {
+    type: TestType;
+    metric: Metric;
+    sample: LotSample;
+    previous?: LotSample;
+  }[] = [];
+
+  if (latest && primary && testType && selected !== qualityId) {
+    keys.push({ type: testType, metric: primary, sample: latest, previous });
+  }
+
+  const qualityPrimary = qualityType?.metrics.find((m) => m.primary);
+  if (qualitySample && qualityPrimary && qualityType) {
+    keys.push({
+      type: qualityType,
+      metric: qualityPrimary,
+      sample: qualitySample,
+      previous:
+        qualityScope.length > 1
+          ? qualityScope[qualityScope.length - 2]
+          : undefined,
+    });
+  }
 
   return (
     <article
@@ -134,6 +185,56 @@ export function ProcessCard({
           {alerting && <span className="dot" aria-label="Nyt resultat" />}
         </span>
       </header>
+
+      {/* Øverst står det, operatøren beslutter ud fra: hvad prøven viser, og
+          hvor gode frøene er. Fanerne ligger nedenunder, fordi de er en vej
+          ned i detaljen og ikke en forudsætning for at læse kortet. */}
+      <div className="process__lead">
+        {keys.length > 0 && (
+          <div className="process__keys">
+            {keys.map((k) => (
+              <div className="process__key" key={k.type.id}>
+                {/* Hvert tal nævner sin egen prøve. De to kommer fra hver sin
+                    scanning, og uden kilden ville de læses som ét resultat.
+
+                    Testtypen nævnes kun, når den ikke er den valgte fane.
+                    Står den fremhævet nedenunder, er "Cleaning Damage #3" tre
+                    ord for meget, og de skubbede metriknavnet ud i "S...". */}
+                <p className="process__key-head">
+                  <span>{k.metric.label}</span>
+                  <span>
+                    {k.type.id !== selected && `${k.type.label} `}#
+                    {k.sample.seq} · {time.format(new Date(k.sample.taken_at))}
+                  </span>
+                </p>
+                <p className="process__key-value">
+                  <span className="process__value">
+                    {formatMetric(k.sample.metrics[k.metric.id], k.metric.unit)}
+                  </span>
+                  <DeltaTag
+                    delta={deltaFor(k.metric, k.sample, k.previous, thresholds)}
+                    silent
+                  />
+                </p>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Kilden står allerede på kvalitetstallet lige ovenfor, så søjlen
+            gentager den ikke. Den siger kun, hvilken vej skalaen vender. */}
+        {qualityGroup && qualitySample && (
+          <div className="process__quality">
+            <Stack
+              metrics={qualityType!.metrics.filter(
+                (m) => m.group === qualityGroup.id,
+              )}
+              sample={qualitySample}
+              note={`${qualityGroup.label} · bedst til venstre`}
+            />
+          </div>
+        )}
+      </div>
 
       {/* Faner vises kun, hvor der er noget at vælge imellem, altså kun på
           Post Cleaning. En fanerække med én fane er støj.
@@ -182,45 +283,6 @@ export function ProcessCard({
         </p>
       ) : (
         <>
-          {/* Testtypen står i båndet ovenfor og ikke også her. Linjen handler
-              om prøven, ikke om hvilken slags prøve det er. */}
-          <p className="process__which">
-            Prøve #{latest.seq} af {scope.length}
-            <span>{time.format(new Date(latest.taken_at))}</span>
-          </p>
-
-          {/* Hovedtal og kvalitet i ét element. Kortet arver kædens rækker, så
-              antallet af børn skal være det samme på alle tre kort: lægger man
-              et ekstra ind, skubbes foden op oven i tabellen. */}
-          <div className="process__lead">
-            {primary && (
-              <div className="process__primary">
-                <span className="process__value">
-                  {formatMetric(latest.metrics[primary.id], primary.unit)}
-                </span>
-                <span className="process__metric-name">{primary.label}</span>
-                <DeltaTag
-                  delta={deltaFor(primary, latest, previous, thresholds)}
-                />
-              </div>
-            )}
-
-            {/* Kvaliteten lige under hovedtallet. FV er kvaliteten af netop de
-                frø, Monogerm tæller, så de to hører sammen. */}
-            {ordinal.map((group) => (
-              <div className="process__quality" key={group.id}>
-                <Stack
-                  metrics={testType!.metrics.filter((m) => m.group === group.id)}
-                  sample={latest}
-                  legend={false}
-                />
-                <p className="process__quality-key">
-                  {group.label} · bedst til venstre
-                </p>
-              </div>
-            ))}
-          </div>
-
           {rest.length > 0 && (
             <ul className="process__metrics">
               {rest.map((metric) => (
@@ -281,10 +343,24 @@ export function ProcessCard({
   );
 }
 
-function DeltaTag({ delta }: { delta: ReturnType<typeof deltaFor> }) {
+function DeltaTag({
+  delta,
+  silent = false,
+}: {
+  delta: ReturnType<typeof deltaFor>;
+  /**
+   * Sig ingenting, når der ikke er noget at sammenligne med. Bruges dér, hvor
+   * prøvenummeret allerede står ved siden af: "#1" og "første prøve" er det
+   * samme udsagn, og den lange af de to er også den, der brækker linjen.
+   */
+  silent?: boolean;
+}) {
   // Første prøve i et trin har intet at blive sammenlignet med. En nul-værdi
   // ville påstå, at den var uændret, og det er ikke det samme.
-  if (!delta) return <span className="delta delta--none">første prøve</span>;
+  if (!delta) {
+    if (silent) return null;
+    return <span className="delta delta--none">første prøve</span>;
+  }
 
   const icon =
     delta.direction === "flat"
