@@ -185,3 +185,21 @@ export function hasSamples(
 ): boolean {
   return samplesIn(samples, process, testType).length > 0;
 }
+
+/**
+ * Et tal, som en dansk operatør skriver det.
+ *
+ * `<input type="number">` afviser komma, og en operatør, der taster "1980,5",
+ * får et tomt felt uden at få at vide hvorfor. Feltet er derfor tekst, og
+ * konverteringen sker her: komma og punktum betyder det samme, og mellemrum og
+ * tusindtalsseparatorer kastes væk.
+ *
+ * Returnerer `null` for tomt og `NaN` for noget, der ikke er et tal. De to er
+ * ikke det samme: det ene er "ikke udfyldt endnu", det andet er en tastefejl,
+ * og de skal besvares hver for sig.
+ */
+export function parseDecimal(raw: string): number | null {
+  const clean = raw.trim().replace(/\s/g, "").replace(/\.(?=\d{3}\b)/g, "");
+  if (clean === "") return null;
+  return Number(clean.replace(",", "."));
+}

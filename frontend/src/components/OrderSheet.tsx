@@ -17,6 +17,7 @@
 
 import { useEffect, useState } from "react";
 import { api } from "../api";
+import { parseDecimal } from "../lots";
 import type { Order } from "../types";
 import { Icon } from "./Icon";
 
@@ -84,9 +85,16 @@ export function OrderSheet({ createdBy, onClose, onSaved }: Props) {
       const body: Record<string, unknown> = { created_by: createdBy };
       for (const f of FIELDS) {
         const raw = (values[f.id] ?? "").trim();
-        if ("type" in f && f.type === "number")
-          body[f.id] = raw === "" ? null : Number(raw);
-        else body[f.id] = raw === "" ? null : raw;
+        if ("type" in f && f.type === "number") {
+          const value = parseDecimal(raw);
+          if (value !== null && Number.isNaN(value)) {
+            setError(`${f.label} skal være et tal. Både komma og punktum går an.`);
+            return;
+          }
+          body[f.id] = value;
+        } else {
+          body[f.id] = raw === "" ? null : raw;
+        }
       }
       const saved = await api.createOrder(body);
       onSaved(saved);
@@ -150,9 +158,13 @@ export function OrderSheet({ createdBy, onClose, onSaved }: Props) {
                   {"required" in f && f.required && <em>påkrævet</em>}
                 </span>
                 <span className="stamdata__input">
+                  {/* Tekst og ikke `type="number"`: sidstnaevnte afviser
+                      komma, og her tastes der komma. Se parseDecimal. */}
                   <input
-                    type={"type" in f && f.type === "number" ? "number" : "text"}
-                    step={"type" in f && f.type === "number" ? "any" : undefined}
+                    type="text"
+                    inputMode={
+                      "type" in f && f.type === "number" ? "decimal" : undefined
+                    }
                     value={values[f.id] ?? ""}
                     onChange={(event) => set(f.id, event.target.value)}
                   />

@@ -4041,7 +4041,12 @@ p:last-child {
   z-index: 40;
 }
 
+/* Én maal for arkets indvendige margen. Hovedet, kroppen, trinnene og foden
+   skal staa i samme lodrette linje, og fire tal, der skal rettes sammen, bliver
+   for eller siden til tre. */
 .sheet {
+  --sheet-pad: 34px;
+
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -4057,7 +4062,7 @@ p:last-child {
   align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
-  padding: 20px 22px 12px;
+  padding: 30px var(--sheet-pad) 24px;
 }
 
 .sheet__eyebrow {
@@ -4093,8 +4098,8 @@ p:last-child {
   list-style: none;
   display: flex;
   gap: 20px;
-  margin: 0;
-  padding: 0 22px 14px;
+  margin: 0 0 18px;
+  padding: 0 var(--sheet-pad) 14px;
   border-bottom: 1px solid var(--border);
   font-size: 15px;
   color: var(--text-muted);
@@ -4110,13 +4115,13 @@ p:last-child {
 }
 
 .sheet__body {
-  padding: 18px 22px;
+  padding: 4px var(--sheet-pad) 30px;
   overflow-y: auto;
   flex: 1;
 }
 
 .sheet__lead {
-  margin: 0 0 18px;
+  margin: 0 0 26px;
   color: var(--text-muted);
   max-width: var(--measure);
 }
@@ -4125,8 +4130,9 @@ p:last-child {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 14px 22px 18px;
+  padding: 18px var(--sheet-pad) 22px;
   border-top: 1px solid var(--border);
+  background: var(--surface-2);
 }
 
 .sheet__count {
@@ -4144,52 +4150,69 @@ p:last-child {
 }
 
 /* --- Stamdata -------------------------------------------------------------- */
+/*
+   Arket erstatter et papirskema, og det maa gerne se ud som et. Felterne er
+   derfor linjer at skrive paa og ikke kasser: en ramme hele vejen rundt om
+   elleve felter giver elleve ens graa rektangler, og saa er der ingen
+   forskel paa det, der betyder noget, og det, der ikke goer.
+*/
 
 /* To blokke, fordi der er to, der ved noget: kontoret ved hvad der skal koeres,
-   operatoeren ved hvad der skete. Uden skellet ser ordrens laaste felter ud
-   som felter, nogen har glemt at goere noget ved. */
+   operatoeren ved hvad der skete. */
 .stamdata__block + .stamdata__block {
-  margin-top: 26px;
-  padding-top: 22px;
-  border-top: 1px solid var(--border);
+  margin-top: 30px;
 }
 
+/* Overskriften baerer en haarstreg ud til kanten. Den deler arket uden at
+   laegge en fyldt bjaelke ind, og den siger, hvor blokken begynder. */
 .stamdata__block h3 {
-  margin: 0 0 16px;
+  margin: 0 0 20px;
   display: flex;
-  align-items: baseline;
-  flex-wrap: wrap;
-  gap: 6px 12px;
-  font-size: 15px;
+  align-items: center;
+  gap: 14px;
+  font-size: 12px;
   font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--text);
 }
 
-.stamdata__block h3 span {
+.stamdata__block h3 em {
+  font-style: normal;
   font-size: 13px;
   font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
   color: var(--text-muted);
+  white-space: nowrap;
 }
 
-/* Et laast felt er ikke et daarligt felt. Det er en oplysning, der kommer et
-   andet sted fra, saa det staar tydeligt og ikke halvt udvisket. */
-.stamdata__input input:disabled {
-  background: var(--surface-2);
-  color: var(--text);
-  cursor: default;
+.stamdata__block h3::after {
+  content: "";
+  flex: 1 1 auto;
+  height: 1px;
+  background: var(--border);
 }
 
 /* To spalter. Felterne er korte og mange, og under hinanden ville arket blive
    en rulle, hvor det, man leder efter, altid er lige uden for skaermen. */
 .stamdata {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-  gap: 18px 24px;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 22px 32px;
 }
 
-.stamdata__field {
+/* Oplysninger fylder mindre end felter, saa de maa staa taettere. */
+.stamdata--facts {
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 18px 32px;
+}
+
+.stamdata__field,
+.stamdata__fact {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 5px;
   min-width: 0;
 }
 
@@ -4202,30 +4225,65 @@ p:last-child {
   display: flex;
   align-items: baseline;
   gap: 10px;
-  font-size: 13px;
-  font-weight: 500;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-muted);
 }
 
-/* "Paakraevet" staar stille. Et roedt maerke ved siden af otte felter goer
+/* "Paakraevet" staar stille. Et roedt maerke ved siden af fem felter goer
    arket til en fejlliste, foer nogen har skrevet noget som helst. */
 .stamdata__label em {
   font-style: normal;
   font-size: 12px;
   font-weight: 400;
   letter-spacing: 0.04em;
-  text-transform: uppercase;
+  color: var(--border-strong);
+}
+
+/* Et laast felt er ikke et felt. Det er en oplysning, og den saettes som tekst
+   uden ramme: en udgraaet inputboks inviterer til at klikke i den og ligner
+   noget, der er gaaet i stykker. */
+.stamdata__value {
+  font-size: 17px;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.stamdata__blank {
+  font-style: normal;
+  font-size: 15px;
   color: var(--text-muted);
 }
 
+/* Linjen at skrive paa. Ingen ramme, ingen fyld: kun stregen under, som paa
+   skemaet den afloeser. */
 .stamdata__input {
   display: flex;
-  align-items: center;
+  align-items: baseline;
   gap: 8px;
+  border-bottom: 1px solid var(--border-strong);
+}
+
+.stamdata__input:focus-within {
+  border-bottom-color: var(--link);
 }
 
 .stamdata__input input {
   flex: 1 1 auto;
   min-width: 0;
+  font: inherit;
+  font-size: 17px;
+  font-variant-numeric: tabular-nums;
+  padding: 4px 0 6px;
+  border: 0;
+  background: none;
+  color: var(--text);
+}
+
+.stamdata__input input:focus {
+  outline: none;
 }
 
 .stamdata__input em {
@@ -4241,14 +4299,15 @@ p:last-child {
 }
 
 /* Den samme kontrol som i driftsrapporten, hvor der staar "Mangler Ordre Nr"
-   i stedet for "Alt OK". Det er en huskeliste, saa den skal ikke vaere roed. */
+   i stedet for "Alt OK". En huskeliste, saa den er en linje og ikke en
+   farvet kasse: en fyldt bjaelke nederst laeses som en fejl. */
 .stamdata__missing {
-  margin: 22px 0 0;
-  padding: 12px 14px;
-  background: var(--surface-2);
+  margin: 30px 0 0;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
   display: flex;
   align-items: baseline;
-  gap: 9px;
+  gap: 10px;
   font-size: 15px;
   color: var(--text-muted);
 }
@@ -4533,6 +4592,10 @@ p:last-child {
   align-items: center;
   gap: 7px;
   font-size: 15px;
+}
+
+.sheet .lots__error {
+  margin: 0 var(--sheet-pad) 18px;
 }
 
 .lots__error {

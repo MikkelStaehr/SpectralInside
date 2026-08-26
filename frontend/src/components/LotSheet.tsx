@@ -23,6 +23,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { api } from "../api";
+import { parseDecimal } from "../lots";
 import type { LotField, LotSummary, Order } from "../types";
 import { Icon } from "./Icon";
 
@@ -118,24 +119,37 @@ export function LotSheet({ fields, order, lot, operator, onClose, onSaved }: Pro
   const set = (id: string, value: string) =>
     setValues((current) => ({ ...current, [id]: value }));
 
-  const payload = () => {
+  /** Nyttelasten, eller navnet på det felt der ikke kan læses som et tal. */
+  const payload = (): Record<string, unknown> | string => {
     const out: Record<string, unknown> = {};
     for (const f of editable) {
       const raw = (values[f.id] ?? "").trim();
-      if (f.type === "datetime") out[f.id] = fromLocal(raw);
-      else if (f.type === "number") out[f.id] = raw === "" ? null : Number(raw);
-      else out[f.id] = raw === "" ? null : raw;
+      if (f.type === "datetime") {
+        out[f.id] = fromLocal(raw);
+      } else if (f.type === "number") {
+        const value = parseDecimal(raw);
+        if (value !== null && Number.isNaN(value)) return f.label;
+        out[f.id] = value;
+      } else {
+        out[f.id] = raw === "" ? null : raw;
+      }
     }
     return out;
   };
 
   const save = async () => {
+    const body = payload();
+    if (typeof body === "string") {
+      setError(`${body} skal være et tal. Både komma og punktum går an.`);
+      return;
+    }
+
     setBusy(true);
     setError(null);
     try {
       const saved = starting
-        ? await api.createLot({ order_no: order!.order_no, ...payload() })
-        : await api.updateLot(lot!.lot_no, payload());
+        ? await api.createLot({ order_no: order!.order_no, ...body })
+        : await api.updateLot(lot!.lot_no, body);
       onSaved(saved);
       onClose();
     } catch (err) {
@@ -145,40 +159,54 @@ export function LotSheet({ fields, order, lot, operator, onClose, onSaved }: Pro
     }
   };
 
-  const field = (f: LotField) => (
-    <label
-      key={f.id}
-      className={`stamdata__field${
-        f.id === "note" ? " stamdata__field--wide" : ""
-      }`}
-    >
-      <span className="stamdata__label">
-        {f.label}
-        {/* Kun på det, der faktisk kan udfyldes. "Påkrævet" ved siden af et
-            låst felt, der allerede står udfyldt, er en besked om ingenting. */}
-        {f.required && !f.readonly && (
-          <em title="Skal udfyldes, før kørslen er fuldstændig">påkrævet</em>
+  /**
+   * Et låst felt er ikke et felt. Det er en oplysning, der kommer et andet
+   * sted fra, og den skrives som tekst uden ramme. En udgrået inputboks
+   * inviterer til at klikke i den og ligner noget, der er gået i stykker;
+   * fem af dem over hinanden ligner en formular, halvdelen er væk fra.
+   */
+  const fact = (f: LotField) => (
+    <div key={f.id} className="stamdata__fact">
+      <span className="stamdata__label">{f.label}</span>
+      <span className="stamdata__value">
+        {(values[f.id] ?? "").trim() || (
+          <em className="stamdata__blank">ikke angivet</em>
         )}
       </span>
-      <span className="stamdata__input">
-        <input
-          type={
-            f.type === "number"
-              ? "number"
-              : f.type === "datetime"
-                ? "datetime-local"
-                : "text"
-          }
-          step={f.type === "number" ? "any" : undefined}
-          value={values[f.id] ?? ""}
-          disabled={f.readonly}
-          onChange={(event) => set(f.id, event.target.value)}
-        />
-        {f.unit && <em>{f.unit}</em>}
-      </span>
-      {f.hint && <span className="stamdata__hint">{f.hint}</span>}
-    </label>
+    </div>
   );
+
+  const field = (f: LotField) =>
+    f.readonly ? (
+      fact(f)
+    ) : (
+      <label
+        key={f.id}
+        className={`stamdata__field${
+          f.id === "note" ? " stamdata__field--wide" : ""
+        }`}
+      >
+        <span className="stamdata__label">
+          {f.label}
+          {f.required && (
+            <em title="Skal udfyldes, før kørslen er fuldstændig">påkrævet</em>
+          )}
+        </span>
+        <span className="stamdata__input">
+          {/* Tal er tekstfelter. `type="number"` afviser komma, og en
+              operatør, der taster "1980,5", får et tomt felt uden at få at
+              vide hvorfor. Se parseDecimal. */}
+          <input
+            type={f.type === "datetime" ? "datetime-local" : "text"}
+            inputMode={f.type === "number" ? "decimal" : undefined}
+            value={values[f.id] ?? ""}
+            onChange={(event) => set(f.id, event.target.value)}
+          />
+          {f.unit && <em>{f.unit}</em>}
+        </span>
+        {f.hint && <span className="stamdata__hint">{f.hint}</span>}
+      </label>
+    );
 
   return (
     <div
@@ -223,21 +251,23 @@ export function LotSheet({ fields, order, lot, operator, onClose, onSaved }: Pro
           {fromOrder.length > 0 && (
             <section className="stamdata__block">
               <h3>
-                Fra ordren
-                <span>Kommer fra ordrekontoret og rettes ikke her</span>
+                <span>Fra ordren</span>
+                <em>Kommer fra ordrekontoret</em>
               </h3>
-              <div className="stamdata">{fromOrder.map(field)}</div>
+              <div className="stamdata stamdata--facts">
+                {fromOrder.map(fact)}
+              </div>
             </section>
           )}
 
           <section className="stamdata__block">
             <h3>
-              Det du udfylder
-              <span>
+              <span>Det du udfylder</span>
+              <em>
                 {starting
                   ? "Kan skrives ind, mens partiet kører"
                   : "Ret det, der har ændret sig"}
-              </span>
+              </em>
             </h3>
             <div className="stamdata">{mine.map(field)}</div>
           </section>
