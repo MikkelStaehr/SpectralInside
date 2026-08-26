@@ -1,8 +1,8 @@
 ﻿/* UBS Spectral Inside
    ---------------------------------------------------------------------------
-   Fladt, skarpt og roligt. Varm, lys kanvas i stedet for kold grå, hvide
-   flader adskilt af hårfine linjer, og næsten monokrom med én accent. Store,
-   klare tal frem for informationstæthed.
+   Fladt, skarpt og roligt. Lys, næsten neutral kanvas, hvide flader adskilt af
+   hårfine linjer, og næsten monokrom med én accent. Store, klare tal frem for
+   informationstæthed.
 
    Fire regler, som resten af filen retter sig efter:
 
@@ -36,12 +36,19 @@
   --ubs-green: #7fbe42;
   --ubs-azure: #0075bb;
 
-  --bg: #eae8e3;
-  --sidebar: #f4f2ee;
+  /* Kanvassen er lys og naesten neutral. Den var #eae8e3, altsaa en decideret
+     beige, og den trak hele skaermen mod cremet. Nu er der to til tre point
+     mere roedt end blaat, hvilket er nok til at den ikke tipper over i kold
+     blaagraa, og ikke nok til at den laeses som en farve.
+
+     Forskellen mellem kanvas og flade er lille med vilje. Adskillelsen kommer
+     af haarfine linjer, ikke af et spring i lyshed. */
+  --bg: #f3f2f0;
+  --sidebar: #ffffff;
   --surface: #ffffff;
-  --surface-2: #f7f6f3;
-  --border: #e0ddd6;
-  --border-strong: #c8c4ba;
+  --surface-2: #efeeeb;
+  --border: #e4e3e0;
+  --border-strong: #c9c8c4;
 
   --text: #191c20;
   --text-muted: #6c7076;
@@ -61,7 +68,7 @@
   --note-fg: #14507a;
   --todo-bg: #f0ecf9;
   --todo-fg: #533b8f;
-  --neutral-bg: #eeece7;
+  --neutral-bg: #eeedea;
   --neutral-fg: #5b5f65;
 
   --radius: 0;

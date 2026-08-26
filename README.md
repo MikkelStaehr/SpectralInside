@@ -187,9 +187,18 @@ til et bestemt sted.
 
 ## Design
 
-Retningen kommer fra moodboardet i `src/img/moodboard/`: varm neutral kanvas i
-stedet for kold grå, fast sidebar, hvide flader med hårfine kanter, næsten
-monokromt med én accent, og store klare tal frem for informationstæthed.
+Retningen kommer fra moodboardet i `src/img/moodboard/`: fast sidebar, hvide
+flader med hårfine kanter, næsten monokromt med én accent, og store klare tal
+frem for informationstæthed.
+
+**Kanvassen er lys og næsten neutral**, `#f3f2f0`. Den var `#eae8e3`, altså en
+decideret beige, som trak hele skærmen mod cremet. Der er nu to til tre point
+mere rødt end blåt: nok til at den ikke tipper over i kold blågrå, ikke nok til
+at den læses som en farve.
+
+Forskellen mellem kanvas og flade er lille med vilje. Adskillelsen kommer af
+hårfine linjer, ikke af et spring i lyshed. Sidebaren er hvid som fladerne og
+skilles fra indholdet af sin kant.
 
 **Fladt, skarpt og roligt.** Fire regler, som `styles.css` retter sig efter:
 
