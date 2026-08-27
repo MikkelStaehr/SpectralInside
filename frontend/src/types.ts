@@ -360,10 +360,28 @@ export interface Line {
   lead: string | null;
 }
 
+/**
+ * Et operationsnummer: en standardprocedure, oversat til et nummer.
+ *
+ * Ikke en proeve og ikke en testtype. Det er den procedure, proeven blev taget
+ * efter — operation 48 er en analyse af 200 froe og renheden af det parti.
+ * Nummeret er det, laboratoriet og resten af huset taler i.
+ */
+export interface Operation {
+  id: string;
+  label: string;
+  lead: string | null;
+  test_type: TestTypeId | null;
+  /** Processer, der ikke kan afsluttes uden et resultat for den her operation. */
+  required_for: ProcessId[];
+  procedure: string | null;
+}
+
 export interface LotMeta {
   processes: Process[];
   test_types: TestType[];
   lines: Line[];
+  operations: Operation[];
   lot_fields: LotField[];
   flat_threshold: number;
   relative_threshold: number;
@@ -379,6 +397,11 @@ export interface LotSample {
   taken_by: string | null;
   adjustment: string | null;
   scan_id: string | null;
+  /**
+   * Operationsnummeret: den standardprocedure, proeven blev taget efter.
+   * Tom paa proever fra foer numrene fandtes.
+   */
+  operation: string | null;
   acknowledged_at: string | null;
   acknowledged_by: string | null;
   metrics: Record<string, number>;

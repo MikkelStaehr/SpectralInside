@@ -175,6 +175,8 @@ export const api = {
       taken_by?: string | null;
       adjustment?: string | null;
       scan_id?: string | null;
+      /** Standardproceduren, proeven blev taget efter. Se operations.yaml. */
+      operation?: string | null;
     },
   ) =>
     request<LotSample>(`/lots/${encodeURIComponent(lotNo)}/samples`, {

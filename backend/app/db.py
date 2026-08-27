@@ -296,8 +296,18 @@ ALTER TABLE lot_samples ADD CONSTRAINT lot_samples_scope CHECK (
     OR (process = 'post_cleaning' AND test_type IN ('purity', 'cleaning_damage', 'ct'))
 );
 
+-- Operationsnummeret: den standardprocedure, proeven blev taget efter. Se
+-- content/operations.yaml. Nullable, fordi proever fra foer numrene fandtes
+-- ikke har et, og en tvungen kolonne ville kraeve at nogen gaettede bagud.
+ALTER TABLE lot_samples ADD COLUMN IF NOT EXISTS operation TEXT;
+
 CREATE UNIQUE INDEX IF NOT EXISTS idx_lot_samples_seq
     ON lot_samples (lot_no, process, test_type, seq);
+
+-- Stemplet spoerger "har lottet et resultat for operation 48". Uden indeks er
+-- det en scanning af alle proever paa lottet, hver gang kortet tegnes.
+CREATE INDEX IF NOT EXISTS idx_lot_samples_operation
+    ON lot_samples (lot_no, operation) WHERE operation IS NOT NULL;
 
 CREATE INDEX IF NOT EXISTS idx_lot_samples_scope
     ON lot_samples (lot_no, process, test_type, seq DESC);
@@ -1198,6 +1208,7 @@ def add_sample(
     adjustment: str | None,
     scan_id: str | None,
     taken_at: datetime | None = None,
+    operation: str | None = None,
 ) -> Row:
     """Registrér én prøve med sine metrikker, i én transaktion.
 
@@ -1220,8 +1231,8 @@ def add_sample(
             """
             INSERT INTO lot_samples
                 (lot_no, process, test_type, seq, taken_at, taken_by,
-                 adjustment, scan_id)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                 adjustment, scan_id, operation)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING *
             """,
             (
@@ -1233,6 +1244,7 @@ def add_sample(
                 (taken_by or "").strip() or None,
                 (adjustment or "").strip() or None,
                 (scan_id or "").strip() or None,
+                (operation or "").strip() or None,
             ),
         ).fetchone()
 

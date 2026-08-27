@@ -4387,6 +4387,39 @@ p:last-child {
   justify-content: flex-end;
 }
 
+/* Checklisten under stemplet: hvilke standardprocedurer der foreligger.
+   Hele listen og ikke kun det manglende — den, der staar med lottet, skal
+   kunne se, hvor langt der er igen, og ikke bare hvad der mangler lige nu. */
+.stamp__ops {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.stamp__ops li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 15px;
+  font-variant-numeric: tabular-nums;
+}
+
+.stamp__ops svg {
+  flex: none;
+  color: var(--border-strong);
+}
+
+.stamp__ops .is-done {
+  color: var(--text-muted);
+}
+
+.stamp__ops .is-done svg {
+  color: var(--ok-fg);
+}
+
 /* --- Ordrebogen ------------------------------------------------------------ */
 /*
    Bygget om ordrens liv og ikke om en tabel: lagt ind, i koe, sat i gang,

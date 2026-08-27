@@ -324,6 +324,7 @@ export function OperatorScreen({ lotNo, onBack, onOpenSample }: Props) {
                     lot={lot}
                     process={process}
                     testTypes={testTypes}
+                    operations={meta.operations}
                     selected={tabs[process.id] ?? process.test_types[0]}
                     active={scope?.process === process.id}
                     thresholds={thresholds}

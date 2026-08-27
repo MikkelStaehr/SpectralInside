@@ -1,0 +1,35 @@
+# Operationsnumre. Standardprocedurer, oversat til et nummer.
+#
+# Et operationsnummer er ikke en prøve og ikke en testtype. Det er den
+# standardprocedure, prøven blev taget efter: hvor mange frø, hvad der måles,
+# og hvad resultatet betyder. Operation 48 er en analyse af 200 frø og
+# renheden af det parti — en afslutning, der viser en kvalitet.
+#
+# Nummeret er det, laboratoriet og resten af huset taler i. Uden det står vores
+# "en prøve af Purity" ved siden af deres "operation 48", og ingen kan se, at
+# det er det samme.
+#
+# Post Cleaning kan først stemples, når der foreligger et resultat for hver
+# operation, der er markeret `required_for: post_cleaning`. Kravet er det samme
+# for alle lots, og det er derfor det står her og ikke på ordren.
+#
+# ADVARSEL: kun operation 48 er rigtig. Den er den ene, jeg har fået oplyst.
+# Resten af listen mangler, og indtil den er skrevet, kræver stemplet kun 48.
+# Skriv de øvrige ind — det er den fil, der afgør, hvornår et lot må lukkes.
+#
+# Felter:
+#   id           nummeret. Tekst, ikke tal: "48" og "0048" er ikke det samme
+#                sted i huset, og et tal ville tabe forskellen.
+#   label        det, operatøren og analytikeren læser
+#   lead         hvad proceduren er. Vises som forklaring
+#   test_type    hvilken slags måling operationen giver
+#   required_for processer, der ikke kan afsluttes uden den. Tom betyder,
+#                at operationen findes, men ikke spærrer for noget
+#   procedure    valgfri. Id på en procedure i content/procedures/
+
+operations:
+  - id: "48"
+    label: Renhed, 200 frø
+    lead: Analyse af 200 frø. Renheden af partiet.
+    test_type: purity
+    required_for: [post_cleaning]

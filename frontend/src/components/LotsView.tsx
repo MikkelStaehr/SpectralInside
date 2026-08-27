@@ -170,6 +170,7 @@ function SampleForm({
   const [values, setValues] = useState<Record<string, string>>({});
   const [adjustment, setAdjustment] = useState("");
   const [scanId, setScanId] = useState("");
+  const [operation, setOperation] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<string | null>(null);
@@ -183,6 +184,24 @@ function SampleForm({
   useEffect(() => {
     if (!current.test_types.includes(testType)) setTestType(current.test_types[0]);
   }, [current, testType]);
+
+  // Kun operationer, der giver den valgte slags måling. En operation uden
+  // test_type passer til alt: den er ikke bundet til en bestemt måling.
+  const operationChoices = useMemo(
+    () =>
+      meta.operations.filter(
+        (op) => !op.test_type || op.test_type === testType,
+      ),
+    [meta, testType],
+  );
+
+  // Et valgt nummer, der ikke længere passer til testtypen, skal ryddes frem
+  // for at blive sendt med og afvist.
+  useEffect(() => {
+    if (operation && !operationChoices.some((op) => op.id === operation)) {
+      setOperation("");
+    }
+  }, [operationChoices, operation]);
 
   const definition = useMemo(
     () => meta.test_types.find((t) => t.id === testType),
@@ -221,11 +240,13 @@ function SampleForm({
         taken_by: operator,
         adjustment: adjustment.trim() || null,
         scan_id: scanId || null,
+        operation: operation || null,
       });
 
       setValues({});
       setAdjustment("");
       setScanId("");
+      setOperation("");
       setDone(`Prøve #${nextSeq} registreret`);
       onSaved();
     } catch (err) {
@@ -314,6 +335,32 @@ function SampleForm({
           placeholder="Slibetryk 3,2 → 2,8 bar"
         />
       </label>
+
+      {/* Operationsnummeret er standardproceduren, prøven blev taget efter.
+          Kun de operationer, der giver den her slags måling, kan vælges: et
+          nummer, der ikke passer, ville blive afvist af serveren, og en liste,
+          der tilbyder noget, der bliver afvist, er en fælde.
+
+          Feltet vises kun, når der er noget at vælge. Er operations.yaml ikke
+          skrevet endnu, er der ingen grund til en tom rulleliste. */}
+      {operationChoices.length > 0 && (
+        <label className="field">
+          <span>
+            Operation <em>standardproceduren, prøven er taget efter</em>
+          </span>
+          <select
+            value={operation}
+            onChange={(e) => setOperation(e.target.value)}
+          >
+            <option value="">Ingen</option>
+            {operationChoices.map((op) => (
+              <option key={op.id} value={op.id}>
+                {op.id} · {op.label}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
 
       <label className="field">
         <span>

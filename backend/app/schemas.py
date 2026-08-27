@@ -297,6 +297,37 @@ class ClassifierVersion(BaseModel):
 # ikke.
 
 
+class Operation(BaseModel):
+    """Et operationsnummer: en standardprocedure, oversat til et nummer.
+
+    Ikke en prøve og ikke en testtype. Det er den procedure, prøven blev taget
+    efter — hvor mange frø, hvad der måles, og hvad resultatet betyder.
+    Operation 48 er en analyse af 200 frø og renheden af det parti.
+
+    Nummeret er det, laboratoriet og resten af huset taler i. Uden det står
+    vores "en prøve af Purity" ved siden af deres "operation 48", og ingen kan
+    se, at det er det samme.
+    """
+
+    id: str = Field(
+        description=(
+            'Nummeret som tekst. "48" og "0048" er ikke det samme sted i '
+            "huset, og et tal ville tabe forskellen."
+        )
+    )
+    label: str
+    lead: str | None = None
+    test_type: TestTypeId | None = None
+    required_for: list[ProcessId] = Field(
+        default_factory=list,
+        description=(
+            "Processer, der ikke kan afsluttes uden et resultat for den her "
+            "operation. Tom betyder, at operationen findes, men ikke spærrer."
+        ),
+    )
+    procedure: str | None = None
+
+
 class LotMeta(BaseModel):
     processes: list[Process] = []
     test_types: list[TestType] = []
@@ -305,6 +336,13 @@ class LotMeta(BaseModel):
         description=(
             "Anlæggene, i den rækkefølge de står på forsiden. Fra "
             "content/lines.yaml."
+        ),
+    )
+    operations: list[Operation] = Field(
+        default_factory=list,
+        description=(
+            "Operationsnumrene. Skærmen bruger dem til at vise, hvilke "
+            "standardprocedurer der mangler, før et lot kan stemples."
         ),
     )
     lot_fields: list[LotField] = Field(
@@ -354,6 +392,14 @@ class LotSample(BaseModel):
     scan_id: str | None = Field(
         default=None,
         description="VideometerLabs egen reference. Åbner billedrækken, hvis den findes.",
+    )
+    operation: str | None = Field(
+        default=None,
+        description=(
+            "Operationsnummeret: den standardprocedure, prøven blev taget "
+            "efter. Se content/operations.yaml. Tom på prøver fra før "
+            "numrene fandtes."
+        ),
     )
     acknowledged_at: datetime | None = None
     acknowledged_by: str | None = None
@@ -574,6 +620,14 @@ class NewSample(BaseModel):
     taken_by: str | None = Field(default=None, max_length=80)
     adjustment: str | None = Field(default=None, max_length=500)
     scan_id: str | None = Field(default=None, max_length=200)
+    operation: str | None = Field(
+        default=None,
+        max_length=40,
+        description=(
+            "Operationsnummeret fra content/operations.yaml. Ukendte numre "
+            "afvises frem for at blive gemt og aldrig talt med."
+        ),
+    )
     taken_at: datetime | None = Field(
         default=None,
         description="Tidspunktet prøven faktisk blev taget. Udeladt betyder nu.",

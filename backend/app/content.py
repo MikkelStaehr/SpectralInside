@@ -16,6 +16,7 @@ import yaml
 from . import config
 from .schemas import (
     Line,
+    Operation,
     MaintenanceTask,
     Operator,
     Procedure,
@@ -220,6 +221,42 @@ def load_lines() -> list[Line]:
             )
         )
     return lines
+
+
+def load_operations() -> list[Operation]:
+    """Operationsnumrene: standardprocedurer, oversat til et nummer.
+
+    Det er den her fil, der afgør, hvornår et lot må lukkes. Er den der ikke,
+    er listen tom, og stemplet falder tilbage på den svagere regel om, at der
+    skal være taget en prøve af hver testtype. Det er en rimelig tilstand at
+    starte i, men det er ikke den rigtige regel.
+    """
+    if not config.OPERATIONS_FILE.is_file():
+        return []
+
+    try:
+        raw = yaml.safe_load(config.OPERATIONS_FILE.read_text(encoding="utf-8")) or {}
+    except yaml.YAMLError as exc:
+        raise ContentError(f"operations.yaml er ugyldig: {exc}") from exc
+
+    operations: list[Operation] = []
+    for entry in raw.get("operations", []) or []:
+        # Nummeret som tekst og ikke som tal: "48" og "0048" er ikke det samme
+        # sted i huset, og YAML ville laese et bart 48 som et heltal.
+        op_id = str(entry.get("id") or "").strip()
+        if not op_id:
+            continue
+        operations.append(
+            Operation(
+                id=op_id,
+                label=str(entry.get("label") or op_id).strip(),
+                lead=str(entry.get("lead") or "").strip() or None,
+                test_type=entry.get("test_type") or None,
+                required_for=[str(p) for p in (entry.get("required_for") or [])],
+                procedure=str(entry.get("procedure") or "").strip() or None,
+            )
+        )
+    return operations
 
 
 def load_setup_options() -> list[SetupGroup]:

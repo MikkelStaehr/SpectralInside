@@ -749,6 +749,7 @@ def _to_lot_sample(row) -> LotSample:
         taken_by=row["taken_by"],
         adjustment=row["adjustment"],
         scan_id=row["scan_id"],
+        operation=row.get("operation"),
         acknowledged_at=row["acknowledged_at"],
         acknowledged_by=row["acknowledged_by"],
         metrics={name: float(value) for name, value in metrics.items()},
@@ -964,6 +965,7 @@ def lot_meta() -> LotMeta:
         processes=lots.PROCESSES,
         test_types=list(lots.TEST_TYPES.values()),
         lines=content.load_lines(),
+        operations=content.load_operations(),
         lot_fields=lots.LOT_FIELDS,
         flat_threshold=lots.FLAT_THRESHOLD,
         relative_threshold=lots.RELATIVE_THRESHOLD,
@@ -1271,6 +1273,29 @@ def create_sample(lot_no: str, sample: NewSample) -> LotSample:
             status_code=422, detail="Prøven kan ikke være taget ude i fremtiden"
         )
 
+    # Operationsnummeret skal findes, og det skal passe til den slags måling.
+    # Et ukendt nummer ville blive gemt og aldrig talt med, og så ville lottet
+    # se ud til at mangle en analyse, der faktisk var lavet.
+    if sample.operation:
+        catalogue = {op.id: op for op in content.load_operations()}
+        operation = catalogue.get(sample.operation.strip())
+        if operation is None:
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    f"Operation {sample.operation} findes ikke. Kendte: "
+                    + (", ".join(sorted(catalogue)) or "ingen")
+                ),
+            )
+        if operation.test_type and operation.test_type != sample.test_type:
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    f"Operation {operation.id} ({operation.label}) er en "
+                    f"{operation.test_type}-analyse og ikke {sample.test_type}."
+                ),
+            )
+
     row = db.add_sample(
         lot_no=lot_no,
         process=sample.process,
@@ -1280,6 +1305,7 @@ def create_sample(lot_no: str, sample: NewSample) -> LotSample:
         adjustment=sample.adjustment,
         scan_id=sample.scan_id,
         taken_at=sample.taken_at,
+        operation=sample.operation,
     )
     return _to_lot_sample({**row, "metrics": sample.metrics})
 
@@ -1288,9 +1314,17 @@ def create_sample(lot_no: str, sample: NewSample) -> LotSample:
 def stamp_lot(lot_no: str, stamp: LotStamp) -> LotSummary:
     """Godkend eller afvis lottet.
 
-    Kun muligt, når Post Cleaning har mindst én prøve af begge testtyper. Et
-    stempel uden det bagvedliggende er et stempel, der ikke betyder noget, og
-    det er værre end intet stempel: nogen tror på det.
+    Kun muligt, når de operationer, der er påkrævet for Post Cleaning, har et
+    resultat. Et operationsnummer er en standardprocedure — operation 48 er en
+    analyse af 200 frø og renheden af partiet — så kravet er ikke "der er taget
+    en prøve", men "den her analyse er lavet efter forskriften".
+
+    Er operationslisten tom, falder reglen tilbage på den svagere: mindst én
+    prøve af hver testtype på trinnet. Det er en rimelig tilstand at starte i,
+    men det er ikke den rigtige regel.
+
+    Et stempel uden det bagvedliggende er et stempel, der ikke betyder noget,
+    og det er værre end intet stempel: nogen tror på det.
     """
     row = db.get_lot(lot_no)
     if row is None:
@@ -1301,18 +1335,33 @@ def stamp_lot(lot_no: str, stamp: LotStamp) -> LotSummary:
             detail=f"Lot {lot_no} er allerede stemplet af {row['stamped_by']}",
         )
 
-    taken = {
-        s["test_type"]
-        for s in db.lot_samples(lot_no)
-        if s["process"] == "post_cleaning"
-    }
-    missing = [t for t in lots.test_types_for("post_cleaning") if t not in taken]
-    if missing:
-        labels = ", ".join(lots.TEST_TYPES[t].label for t in missing)
-        raise HTTPException(
-            status_code=409,
-            detail=f"Post Cleaning mangler stadig en prøve af: {labels}",
-        )
+    samples = db.lot_samples(lot_no)
+    required = [
+        op for op in content.load_operations() if "post_cleaning" in op.required_for
+    ]
+
+    if required:
+        # Operationen tæller, uanset hvilket trin prøven blev taget på: den er
+        # en analyse af partiet, ikke af et trin.
+        done = {s["operation"] for s in samples if s.get("operation")}
+        outstanding = [op for op in required if op.id not in done]
+        if outstanding:
+            names = ", ".join(f"{op.id} ({op.label})" for op in outstanding)
+            raise HTTPException(
+                status_code=409,
+                detail=f"Lottet kan ikke stemples. Der mangler resultat for: {names}",
+            )
+    else:
+        taken = {
+            s["test_type"] for s in samples if s["process"] == "post_cleaning"
+        }
+        missing = [t for t in lots.test_types_for("post_cleaning") if t not in taken]
+        if missing:
+            labels = ", ".join(lots.TEST_TYPES[t].label for t in missing)
+            raise HTTPException(
+                status_code=409,
+                detail=f"Post Cleaning mangler stadig en prøve af: {labels}",
+            )
 
     stamped = db.stamp_lot(lot_no, stamp.stamp, stamp.stamped_by, stamp.note)
     if stamped is None:

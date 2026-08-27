@@ -16,6 +16,7 @@
 import type {
   LotDetail,
   LotSample,
+  Operation,
   Process,
   StampId,
   TestType,
@@ -51,6 +52,8 @@ interface Props {
   lot: LotDetail;
   process: Process;
   testTypes: Record<string, TestType>;
+  /** Standardprocedurerne. Afgør hvornår et lot må stemples. */
+  operations: Operation[];
   selected: TestTypeId;
   /** Om det er dette kort, prøvehistorikken nedenunder viser. */
   active: boolean;
@@ -76,6 +79,7 @@ export function ProcessCard({
   lot,
   process,
   testTypes,
+  operations,
   selected,
   active,
   thresholds,
@@ -334,6 +338,7 @@ export function ProcessCard({
             lot={lot}
             process={process}
             testTypes={testTypes}
+            operations={operations}
             onStamp={onStamp}
             busy={busy}
           />
@@ -388,12 +393,14 @@ function StampArea({
   lot,
   process,
   testTypes,
+  operations,
   onStamp,
   busy,
 }: {
   lot: LotDetail;
   process: Process;
   testTypes: Record<string, TestType>;
+  operations: Operation[];
   onStamp: (stamp: StampId) => void;
   busy: boolean;
 }) {
@@ -414,23 +421,68 @@ function StampArea({
     );
   }
 
-  // Hvilke testtyper der kræves, kommer fra processen og ikke fra en liste
-  // her. Kommer der en tredje til, skal denne fil ikke røres.
-  const missing = process.test_types.filter(
-    (t) => samplesIn(lot.samples, process.id, t).length === 0,
+  // Hvad der kræves, kommer fra operationslisten og ikke fra en liste her.
+  //
+  // Et operationsnummer er en standardprocedure — operation 48 er en analyse
+  // af 200 frø og renheden af partiet — så kravet er ikke "der er taget en
+  // prøve", men "den her analyse er lavet efter forskriften". Operationen
+  // tæller uanset hvilket trin prøven blev taget på: den er en analyse af
+  // partiet, ikke af et trin.
+  const required = operations.filter((op) =>
+    op.required_for.includes(process.id),
   );
 
-  if (missing.length > 0) {
-    const names = missing.map((t) => testTypes[t]?.label ?? t).join(" og ");
-    return (
-      <div className="stamp stamp--blocked">
-        <Icon name="info" size={18} strokeWidth={2.2} />
-        <p>
-          Lottet kan ikke stemples endnu. Post Cleaning mangler stadig en prøve
-          af {names}.
-        </p>
-      </div>
+  if (required.length > 0) {
+    const done = new Set(
+      lot.samples.map((s) => s.operation).filter(Boolean) as string[],
     );
+    const outstanding = required.filter((op) => !done.has(op.id));
+
+    if (outstanding.length > 0) {
+      return (
+        <div className="stamp stamp--blocked">
+          <Icon name="info" size={18} strokeWidth={2.2} />
+          <div>
+            <p>Lottet kan ikke stemples endnu.</p>
+            {/* Hele listen og ikke kun det manglende. Den, der står med
+                lottet, skal kunne se, hvor langt der er igen, og ikke bare
+                hvad der mangler lige nu. */}
+            <ul className="stamp__ops">
+              {required.map((op) => (
+                <li key={op.id} className={done.has(op.id) ? "is-done" : undefined}>
+                  <Icon
+                    name={done.has(op.id) ? "circle-check" : "circle-alert"}
+                    size={15}
+                    strokeWidth={2.2}
+                  />
+                  <span>
+                    Op. {op.id} · {op.label}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      );
+    }
+  } else {
+    // Ingen operationsliste endnu. Den svagere regel: mindst én prøve af hver
+    // testtype på trinnet. Rimelig at starte i, men ikke den rigtige regel.
+    const missing = process.test_types.filter(
+      (t) => samplesIn(lot.samples, process.id, t).length === 0,
+    );
+    if (missing.length > 0) {
+      const names = missing.map((t) => testTypes[t]?.label ?? t).join(" og ");
+      return (
+        <div className="stamp stamp--blocked">
+          <Icon name="info" size={18} strokeWidth={2.2} />
+          <p>
+            Lottet kan ikke stemples endnu. {process.label} mangler stadig en
+            prøve af {names}.
+          </p>
+        </div>
+      );
+    }
   }
 
   return (
