@@ -921,7 +921,11 @@ def list_orders(open_only: bool = True, limit: int = 100) -> list[Row]:
     return _run(
         lambda conn: conn.execute(
             f"""
-            SELECT o.*, l.lot_no AS started_lot, l.started_at AS started_at
+            SELECT o.*,
+                   l.lot_no     AS started_lot,
+                   l.started_at AS started_at,
+                   l.stamp      AS started_stamp,
+                   l.ended_at   AS started_ended_at
             FROM orders o
             LEFT JOIN lots l ON l.order_no = o.order_no
             {where}
@@ -937,7 +941,11 @@ def get_order(order_no: str) -> Row | None:
     return _run(
         lambda conn: conn.execute(
             """
-            SELECT o.*, l.lot_no AS started_lot, l.started_at AS started_at
+            SELECT o.*,
+                   l.lot_no     AS started_lot,
+                   l.started_at AS started_at,
+                   l.stamp      AS started_stamp,
+                   l.ended_at   AS started_ended_at
             FROM orders o
             LEFT JOIN lots l ON l.order_no = o.order_no
             WHERE o.order_no = %s
@@ -979,6 +987,43 @@ def add_order(
                 now(),
                 (created_by or "").strip() or None,
             ),
+        ).fetchone()
+    )
+
+
+#: Ordrefelter, der er tekst. Tom streng bliver til NULL, se _clean.
+_ORDER_TEXT = ("lot_no", "item_no", "variety", "line", "note")
+
+
+def update_order(order_no: str, fields: dict[str, Any]) -> Row | None:
+    """Ret en ordre, der endnu ikke er sat i gang.
+
+    ``NOT EXISTS`` i WHERE er det, der gør det. En ordre, partiet allerede
+    kører på, må ikke kunne ændres: kørslen har kopieret ordrens felter, og to
+    forskellige svar på det samme spørgsmål er værre end en tastefejl, der
+    står. Er den kørt, skal kontoret rette kørslen, ikke ordren.
+    """
+    if not fields:
+        return get_order(order_no)
+
+    sets = ", ".join(f"{name} = %s" for name in fields)
+    values = [
+        (value.strip() or None)
+        if name in _ORDER_TEXT and isinstance(value, str)
+        else value
+        for name, value in fields.items()
+    ]
+    values.extend([order_no, order_no])
+    return _run(
+        lambda conn: conn.execute(
+            f"""
+            UPDATE orders SET {sets}
+            WHERE order_no = %s
+              AND cancelled_at IS NULL
+              AND NOT EXISTS (SELECT 1 FROM lots WHERE order_no = %s)
+            RETURNING *
+            """,
+            tuple(values),
         ).fetchone()
     )
 

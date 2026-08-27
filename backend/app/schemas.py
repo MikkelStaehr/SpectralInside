@@ -135,11 +135,13 @@ class DailyCompletion(BaseModel):
 class Operator(BaseModel):
     initials: str
     name: str | None = None
-    role: Literal["analytiker", "udvikler"] = Field(
+    role: Literal["analytiker", "udvikler", "ordrekontor"] = Field(
         default="analytiker",
         description=(
-            "Styrer om analysedelen vises. Det er oprydning, ikke adgangs"
-            "kontrol: der er ingen indlogning, og intet er beskyttet."
+            "Styrer hvad der vises i menuen. Analytikeren arbejder med "
+            "instrumentet, ordrekontoret lægger ordrer ind, og udvikleren ser "
+            "det hele. Det er oprydning, ikke adgangskontrol: der er ingen "
+            "indlogning, og intet er beskyttet."
         ),
     )
 
@@ -412,6 +414,34 @@ class Order(BaseModel):
         ),
     )
     started_at: datetime | None = None
+    started_stamp: StampId | None = Field(
+        default=None,
+        description="Kvalitetsstemplet på kørslen, hvis den er nået dertil.",
+    )
+    started_ended_at: datetime | None = Field(
+        default=None,
+        description="Hvornår kørslen blev afsluttet, hvis nogen har sat det.",
+    )
+
+
+class OrderUpdate(BaseModel):
+    """Rettelse af en ordre, der endnu ikke er sat i gang.
+
+    Ordrenummeret står ikke her. Det er nøglen, og en ordre med et nyt nummer
+    er en anden ordre.
+
+    Er ordren kørt, kan den ikke rettes: kørslen har kopieret ordrens felter,
+    og to forskellige svar på det samme spørgsmål er værre end en tastefejl,
+    der står.
+    """
+
+    lot_no: str | None = Field(default=None, min_length=1, max_length=60)
+    item_no: str | None = Field(default=None, max_length=60)
+    variety: str | None = Field(default=None, max_length=120)
+    line: str | None = Field(default=None, max_length=60)
+    planned_kg: float | None = Field(default=None, ge=0)
+    planned_start: datetime | None = None
+    note: str | None = Field(default=None, max_length=500)
 
 
 class NewOrder(BaseModel):

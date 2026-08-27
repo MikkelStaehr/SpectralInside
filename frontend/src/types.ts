@@ -70,7 +70,12 @@ export interface DailyStatus {
 export interface Operator {
   initials: string;
   name: string | null;
-  role: "analytiker" | "udvikler";
+  /**
+   * Hvad der vises i menuen. Analytikeren arbejder med instrumentet,
+   * ordrekontoret laegger ordrer ind, udvikleren ser det hele. Oprydning og
+   * ikke adgangskontrol: der er ingen indlogning, og intet er beskyttet.
+   */
+  role: "analytiker" | "udvikler" | "ordrekontor";
 }
 
 export interface ClassCount {
@@ -326,6 +331,9 @@ export interface Order {
   /** Koerslen paa ordren, hvis den er startet. Udledt og ikke gemt. */
   started_lot: string | null;
   started_at: string | null;
+  /** Kvalitetsstemplet paa koerslen, hvis den er naaet dertil. */
+  started_stamp: StampId | null;
+  started_ended_at: string | null;
 }
 
 /**

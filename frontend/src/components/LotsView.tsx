@@ -1,9 +1,13 @@
 ﻿/**
  * Analytikerens side af lots.
  *
- * Her startes et lot, og her registreres prøverne. Det er skriveenden af den
- * skærm, produktionen læser, og indtil connectoren kan hente tallene direkte
- * ud af analysen, er det her, de kommer ind.
+ * Her registreres prøverne. Det er skriveenden af den skærm, produktionen
+ * læser, og indtil connectoren kan hente tallene direkte ud af analysen, er
+ * det her, de kommer ind.
+ *
+ * Lots startes ikke her. En kørsel begynder med en ordre, ordrekontoret lægger
+ * ordren ind på sin egen side, og operatøren sætter den i gang ude ved linjen.
+ * De tre er tre slags arbejde, og de skal ikke dele side.
  *
  * Formularen kender ikke metrikkerne. Den bygger felterne ud fra
  * /api/lots/meta, så en ny metrik er en ændring i backenden og ikke to
@@ -19,14 +23,12 @@ import type {
   LotDetail,
   LotMeta,
   LotSummary,
-  Order,
   ProcessId,
   ScanSummary,
   TestTypeId,
 } from "../types";
 import { formatMetric, samplesIn } from "../lots";
 import { Icon } from "./Icon";
-import { OrderSheet } from "./OrderSheet";
 
 const when = new Intl.DateTimeFormat("da-DK", {
   day: "numeric",
@@ -47,9 +49,6 @@ export function LotsView({ operator, onOpenMonitor }: Props) {
   const [selected, setSelected] = useState<string | null>(null);
   const [detail, setDetail] = useState<LotDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
-
-  const [showNew, setShowNew] = useState(false);
 
   useEffect(() => {
     void Promise.all([api.lotMeta(), api.lots()])
@@ -87,32 +86,16 @@ export function LotsView({ operator, onOpenMonitor }: Props) {
     setDetail(lotData);
   };
 
-  // Lots oprettes ikke her længere. En kørsel begynder med en ordre, og
-  // operatøren sætter den i gang fra produktionsskærmen. Herfra lægges ordren
-  // ind, indtil ordrekontoret gør det ad et snit.
-  const orderCreated = (order: Order) => {
-    setError(null);
-    setNotice(
-      `Ordre ${order.order_no} er lagt ind. Den ligger nu på ` +
-        `produktionsskærmen under "Start et lot".`,
-    );
-  };
 
   return (
     <div className="lots">
       <header className="page__head">
         <h1>Lots</h1>
         <p>
-          Registrér prøverne på et lot, der kører. Selve lottet sættes i gang
-          fra produktionsskærmen ud fra en ordre.
+          Registrér prøverne på et lot, der kører. Lottet sættes i gang fra
+          produktionsskærmen, og ordren bag det lægges ind af ordrekontoret.
         </p>
       </header>
-
-      {notice && (
-        <div className="alert" role="status">
-          <p>{notice}</p>
-        </div>
-      )}
 
       {error && (
         <div className="alert alert--warning" role="alert">
@@ -141,16 +124,6 @@ export function LotsView({ operator, onOpenMonitor }: Props) {
           </select>
         </label>
 
-        <button
-          type="button"
-          className="btn btn--ghost"
-          disabled={!meta}
-          onClick={() => setShowNew(true)}
-        >
-          <Icon name="plus" size={16} strokeWidth={2.2} />
-          Ny ordre
-        </button>
-
         {selected && (
           <button
             type="button"
@@ -162,15 +135,6 @@ export function LotsView({ operator, onOpenMonitor }: Props) {
           </button>
         )}
       </div>
-
-      {showNew && meta && (
-        <OrderSheet
-          createdBy={operator}
-          lines={meta.lines}
-          onClose={() => setShowNew(false)}
-          onSaved={orderCreated}
-        />
-      )}
 
       {meta && detail && (
         <>

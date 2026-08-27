@@ -25,6 +25,14 @@ interface Props {
   /** Initialerne på den, der lægger ordren ind. */
   createdBy: string;
   /**
+   * Ordren, der rettes. Udeladt betyder, at en ny skal lægges ind.
+   *
+   * Kun ordrer, ingen har sat i gang, kan rettes. Er den kørt, har kørslen
+   * kopieret ordrens felter, og to forskellige svar på det samme spørgsmål er
+   * værre end en tastefejl, der står.
+   */
+  order?: Order;
+  /**
    * Anlæggene. Ordren skal pege på ét af dem, ellers lander den uden for
    * sporene på forsiden, og en ordre, ingen kan se, er ikke en ordre.
    */
@@ -75,8 +83,32 @@ const FIELDS = [
 const fromLocal = (value: string) =>
   value ? new Date(value).toISOString() : null;
 
-export function OrderSheet({ createdBy, lines, onClose, onSaved }: Props) {
-  const [values, setValues] = useState<Record<string, string>>({});
+const toLocal = (iso: string | null | undefined) => {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(
+    d.getHours(),
+  )}:${pad(d.getMinutes())}`;
+};
+
+export function OrderSheet({ createdBy, order, lines, onClose, onSaved }: Props) {
+  const editing = order !== undefined;
+
+  const [values, setValues] = useState<Record<string, string>>(() =>
+    Object.fromEntries(
+      FIELDS.map((f) => {
+        const raw = order
+          ? (order as unknown as Record<string, unknown>)[f.id]
+          : undefined;
+        if (raw === null || raw === undefined) return [f.id, ""];
+        if ("type" in f && f.type === "datetime")
+          return [f.id, toLocal(raw as string)];
+        return [f.id, String(raw)];
+      }),
+    ),
+  );
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -103,8 +135,11 @@ export function OrderSheet({ createdBy, lines, onClose, onSaved }: Props) {
     setBusy(true);
     setError(null);
     try {
-      const body: Record<string, unknown> = { created_by: createdBy };
+      const body: Record<string, unknown> = editing ? {} : { created_by: createdBy };
       for (const f of FIELDS) {
+        // Ordrenummeret er nøglen. En ordre med et nyt nummer er en anden
+        // ordre, så det sendes ikke med på en rettelse.
+        if (editing && f.id === "order_no") continue;
         const raw = (values[f.id] ?? "").trim();
         const kind = "type" in f ? f.type : "text";
         if (kind === "number") {
@@ -120,7 +155,9 @@ export function OrderSheet({ createdBy, lines, onClose, onSaved }: Props) {
           body[f.id] = raw === "" ? null : raw;
         }
       }
-      const saved = await api.createOrder(body);
+      const saved = editing
+        ? await api.updateOrder(order.order_no, body)
+        : await api.createOrder(body);
       onSaved(saved);
       onClose();
     } catch (err) {
@@ -135,7 +172,7 @@ export function OrderSheet({ createdBy, lines, onClose, onSaved }: Props) {
       className="sheet__backdrop"
       role="dialog"
       aria-modal="true"
-      aria-label="Ny ordre"
+      aria-label={editing ? `Ret ordre ${order.order_no}` : "Ny ordre"}
       onClick={(event) => {
         if (event.target === event.currentTarget) onClose();
       }}
@@ -144,7 +181,7 @@ export function OrderSheet({ createdBy, lines, onClose, onSaved }: Props) {
         <header className="sheet__head">
           <div>
             <p className="sheet__eyebrow">Ordrekontoret</p>
-            <h2>Ny ordre</h2>
+            <h2>{editing ? `Ordre ${order.order_no}` : "Ny ordre"}</h2>
           </div>
           <button
             type="button"
@@ -165,9 +202,9 @@ export function OrderSheet({ createdBy, lines, onClose, onSaved }: Props) {
 
         <div className="sheet__body">
           <p className="sheet__lead">
-            Ordren lægger sig i kø på det anlæg, du vælger, og operatøren
-            starter den derfra. Den kan trækkes tilbage, så længe ingen har sat
-            den i gang.
+            {editing
+              ? "Ordren er ikke sat i gang endnu, så den kan stadig rettes. Er den først kørt, skal rettelsen ske på kørslen."
+              : "Ordren lægger sig i kø på det anlæg, du vælger, og operatøren starter den derfra. Den kan trækkes tilbage, så længe ingen har sat den i gang."}
           </p>
 
           <div className="stamdata">
@@ -211,6 +248,7 @@ export function OrderSheet({ createdBy, lines, onClose, onSaved }: Props) {
                         "type" in f && f.type === "number" ? "decimal" : undefined
                       }
                       value={values[f.id] ?? ""}
+                      disabled={editing && f.id === "order_no"}
                       onChange={(event) => set(f.id, event.target.value)}
                     />
                   )}
@@ -230,7 +268,7 @@ export function OrderSheet({ createdBy, lines, onClose, onSaved }: Props) {
           </button>
           <button type="button" className="btn" disabled={busy} onClick={save}>
             <Icon name="check" size={17} strokeWidth={2.2} />
-            Læg ordren ind
+            {editing ? "Gem ordren" : "Læg ordren ind"}
           </button>
         </footer>
       </div>

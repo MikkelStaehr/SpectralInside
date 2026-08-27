@@ -184,7 +184,7 @@ def load_operators() -> list[Operator]:
             continue
         name = str(entry["name"]).strip() if entry.get("name") else None
         role = str(entry.get("role") or "analytiker").strip().lower()
-        if role not in ("analytiker", "udvikler"):
+        if role not in ("analytiker", "udvikler", "ordrekontor"):
             role = "analytiker"
         operators.append(Operator(initials=initials, name=name, role=role))
     return operators

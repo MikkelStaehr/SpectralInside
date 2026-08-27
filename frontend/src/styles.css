@@ -4373,6 +4373,161 @@ p:last-child {
   justify-content: flex-end;
 }
 
+/* --- Ordrebogen ------------------------------------------------------------ */
+/*
+   Bygget om ordrens liv og ikke om en tabel: lagt ind, i koe, sat i gang,
+   koert. Blokkene staar i den raekkefoelge, og hver enkelt siger, hvad der kan
+   goeres ved ordren i det stadie.
+*/
+.orders {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.orders__bar {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.orders__block {
+  margin-top: 18px;
+}
+
+.orders__block h2 {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--text);
+}
+
+.orders__block h2 em {
+  font-style: normal;
+  letter-spacing: 0;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+}
+
+.orders__block h2::after {
+  content: "";
+  flex: 1 1 auto;
+  height: 1px;
+  background: var(--border);
+}
+
+.orders__lead {
+  margin: 6px 0 14px;
+  font-size: 15px;
+  color: var(--text-muted);
+}
+
+.orders__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* Fire spalter: hvem, hvad, hvor langt, og hvad man kan goere. Faste bredder
+   paa de tre, saa noeglerne staar under hinanden ned gennem listen og kan
+   skimmes lodret. */
+.order {
+  display: grid;
+  grid-template-columns: 190px minmax(0, 1fr) 210px auto;
+  align-items: center;
+  gap: 20px;
+  padding: 16px 20px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+/* Den, der venter, er den, der kan goeres noget ved. Kanten siger det. */
+.order--queued {
+  border-left: 3px solid var(--link);
+}
+
+.order--running {
+  border-left: 3px solid var(--text);
+}
+
+.order--cancelled {
+  color: var(--text-muted);
+}
+
+.order__id p,
+.order__what p,
+.order__state p {
+  margin: 0;
+}
+
+.order__no {
+  font-size: 17px;
+  font-weight: 600;
+}
+
+.order__line,
+.order__meta,
+.order__state p {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.order__lot {
+  font-size: 17px;
+}
+
+.order__note {
+  margin-top: 4px !important;
+  font-size: 13px;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.order__stamp {
+  font-weight: 600;
+}
+
+.order__stamp--ok {
+  color: var(--ok-fg) !important;
+}
+
+.order__stamp--no {
+  color: var(--danger-fg) !important;
+}
+
+.order__actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.order__locked {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+@media (max-width: 1000px) {
+  .order {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .order__actions {
+    justify-content: flex-start;
+  }
+}
+
 /* --- Stamdata -------------------------------------------------------------- */
 /*
    Arket erstatter et papirskema, og det maa gerne se ud som et. Felterne er

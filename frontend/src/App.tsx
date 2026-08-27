@@ -29,6 +29,7 @@ import { LotSheet } from "./components/LotSheet";
 import { OperatorScreen } from "./components/OperatorScreen";
 import { SampleView } from "./components/SampleView";
 import { LotsView } from "./components/LotsView";
+import { OrdersView } from "./components/OrdersView";
 import { ScansView } from "./components/ScansView";
 import { ScanView } from "./components/ScanView";
 import { AnalysisView } from "./components/AnalysisView";
@@ -46,6 +47,7 @@ type View =
   | { name: "scan"; id: string }
   | { name: "analysis" }
   | { name: "lots" }
+  | { name: "orders" }
   | { name: "display" }
   | { name: "startRun" }
   | { name: "lotMonitor"; lotNo: string }
@@ -83,6 +85,7 @@ function parseHash(hash: string): View {
     return { name: "scan", id: decodeURIComponent(path.slice("scanning/".length)) };
   if (path === "scanninger") return { name: "scans" };
   if (path === "lots") return { name: "lots" };
+  if (path === "ordrer") return { name: "orders" };
   if (path === "wiki") return { name: "wiki" };
   if (path === "vedligehold") return { name: "maintenance" };
   if (path === "analyse") return { name: "analysis" };
@@ -110,6 +113,8 @@ function toHash(view: View): string {
       return "#/scanninger";
     case "lots":
       return "#/lots";
+    case "orders":
+      return "#/ordrer";
     case "wiki":
       return "#/wiki";
     case "maintenance":
@@ -175,13 +180,27 @@ export default function App() {
     return dailyData;
   }, []);
 
+  // Rollen afgør ikke bare menuen, men også hvad der overhovedet hentes.
+  // Ordrekontoret skal hverken have analytikerens arbejdsbord eller
+  // opstartsguiden til instrumentet: den handler om at tænde VideometerLab,
+  // og det er ikke deres morgen.
+  const me = operators.find(
+    (o) => o.initials.toLowerCase() === operator.toLowerCase(),
+  );
+  const unconfigured = operators.length === 0;
+  const showLab = unconfigured || me?.role !== "ordrekontor";
+
   useEffect(() => {
     if (!operator) return;
 
     void (async () => {
       setError(null);
       window.scrollTo({ top: 0 });
-      const current = parseHash(hash);
+      // Ordrekontorets forside er ordrebogen. Kun forsiden deles: Beskeder er
+      // fælles og skal stadig hentes som alle andre.
+      const asked = parseHash(hash);
+      const current: View =
+        !showLab && asked.name === "home" ? { name: "orders" } : asked;
       const shared = procedures.length === 0 ? loadShared() : Promise.resolve();
 
       try {
@@ -229,6 +248,8 @@ export default function App() {
           // Lots-siden henter selv. Den skal ikke ind i det fælles kald,
           // fordi den er den eneste visning, der både læser og skriver.
           case "lots":
+          case "orders":
+            // Begge sider henter selv. De deler ikke arbejdsbordets kald.
             await shared;
             break;
           default: {
@@ -382,10 +403,24 @@ export default function App() {
     return <LoginView operators={operators} onChoose={signIn} />;
   }
 
-  const me = operators.find(
-    (o) => o.initials.toLowerCase() === operator.toLowerCase(),
-  );
-  const showAnalysis = operators.length === 0 || me?.role === "udvikler";
+  // Tre slags arbejde, tre menuer. Analytikeren arbejder med instrumentet,
+  // ordrekontoret bestemmer hvad der skal køres, og udvikleren ser det hele.
+  // Operatøren ude ved linjen står ikke på listen: produktionsskærmen ligger
+  // foran login.
+  //
+  // Er listen tom, er der ingen at slå op, og så vises alt. Ellers ville
+  // applikationen se halvt tom ud, mens nogen er ved at sætte den op, og det
+  // ligner en fejl.
+  const showAnalysis = unconfigured || me?.role === "udvikler";
+  const showOrders =
+    unconfigured || me?.role === "ordrekontor" || me?.role === "udvikler";
+
+  // Ordrekontoret lander på ordrebogen og ikke på analytikerens arbejdsbord.
+  // Forsiden er den samme adresse for alle, så det er her, de skilles — og
+  // det sker inde i skallen, så menuen bliver stående.
+  const showOrdersView =
+    view.name === "orders" || (!showLab && view.name === "home");
+
   const openProcedureView = (id: string) => navigate({ name: "procedure", id });
 
   return (
@@ -406,53 +441,75 @@ export default function App() {
         </div>
 
         <nav className="nav" aria-label="Hovedmenu">
-          <button
-            type="button"
-            className={navClass(view.name === "home")}
-            onClick={() => navigate({ name: "home" })}
-          >
-            <Icon name="layout-dashboard" />
-            Arbejdsbord
-          </button>
+          {showLab && (
+            <>
+              <button
+                type="button"
+                className={navClass(view.name === "home")}
+                onClick={() => navigate({ name: "home" })}
+              >
+                <Icon name="layout-dashboard" />
+                Arbejdsbord
+              </button>
 
-          <button
-            type="button"
-            className={navClass(
-              view.name === "scans" || view.name === "scan",
-            )}
-            onClick={() => navigate({ name: "scans" })}
-          >
-            <Icon name="scan-line" />
-            Scanninger
-          </button>
+              <button
+                type="button"
+                className={navClass(
+                  view.name === "scans" || view.name === "scan",
+                )}
+                onClick={() => navigate({ name: "scans" })}
+              >
+                <Icon name="scan-line" />
+                Scanninger
+              </button>
 
-          <button
-            type="button"
-            className={navClass(view.name === "lots")}
-            onClick={() => navigate({ name: "lots" })}
-          >
-            <Icon name="badge-check" />
-            Lots
-          </button>
+              <button
+                type="button"
+                className={navClass(view.name === "lots")}
+                onClick={() => navigate({ name: "lots" })}
+              >
+                <Icon name="badge-check" />
+                Lots
+              </button>
+            </>
+          )}
 
-          <button
-            type="button"
-            className={navClass(view.name === "wiki")}
-            onClick={() => navigate({ name: "wiki" })}
-          >
-            <Icon name="book-open" />
-            Wiki
-          </button>
+          {showOrders && (
+            <button
+              type="button"
+              className={navClass(view.name === "orders")}
+              onClick={() => navigate({ name: "orders" })}
+            >
+              <Icon name="file-text" />
+              Ordrer
+            </button>
+          )}
 
-          <button
-            type="button"
-            className={navClass(view.name === "maintenance")}
-            onClick={() => navigate({ name: "maintenance" })}
-          >
-            <Icon name="wrench" />
-            Vedligehold
-          </button>
+          {showLab && (
+            <>
+              <button
+                type="button"
+                className={navClass(view.name === "wiki")}
+                onClick={() => navigate({ name: "wiki" })}
+              >
+                <Icon name="book-open" />
+                Wiki
+              </button>
 
+              <button
+                type="button"
+                className={navClass(view.name === "maintenance")}
+                onClick={() => navigate({ name: "maintenance" })}
+              >
+                <Icon name="wrench" />
+                Vedligehold
+              </button>
+            </>
+          )}
+
+          {/* Beskeder er den fælles kanal og hører til alle tre. Det er der,
+              en analytiker skriver, at instrumentet er nede, og det skal
+              ordrekontoret også kunne læse. */}
           <button
             type="button"
             className={navClass(view.name === "messages")}
@@ -506,7 +563,7 @@ export default function App() {
 
         {loading && <p className="empty">Henter…</p>}
 
-        {!loading && view.name === "home" && dashboard && (
+        {!loading && view.name === "home" && showLab && dashboard && (
           <DashboardView
             data={dashboard}
             daily={daily}
@@ -556,6 +613,8 @@ export default function App() {
             onOpenMonitor={(lotNo) => navigate({ name: "lotMonitor", lotNo })}
           />
         )}
+
+        {!loading && showOrdersView && <OrdersView operator={operator} />}
 
         {!loading && view.name === "analysis" && (
           <AnalysisView

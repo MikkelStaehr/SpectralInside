@@ -140,6 +140,12 @@ export const api = {
     request<Order>(`/orders/${encodeURIComponent(orderNo)}`),
   createOrder: (order: Record<string, unknown>) =>
     request<Order>("/orders", { method: "POST", body: JSON.stringify(order) }),
+  /** Ret en ordre, der endnu ikke er sat i gang. Kun de naevnte felter roeres. */
+  updateOrder: (orderNo: string, fields: Record<string, unknown>) =>
+    request<Order>(`/orders/${encodeURIComponent(orderNo)}`, {
+      method: "PATCH",
+      body: JSON.stringify(fields),
+    }),
   cancelOrder: (orderNo: string) =>
     request<Order>(`/orders/${encodeURIComponent(orderNo)}`, { method: "DELETE" }),
 

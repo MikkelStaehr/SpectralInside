@@ -44,6 +44,7 @@ from .schemas import (
     NewOrder,
     NewSample,
     Order,
+    OrderUpdate,
     RecentScan,
     ScanCounts,
     DisplayDetail,
@@ -808,6 +809,8 @@ def _to_order(row) -> Order:
         cancelled_at=row["cancelled_at"],
         started_lot=row.get("started_lot"),
         started_at=row.get("started_at"),
+        started_stamp=row.get("started_stamp"),
+        started_ended_at=row.get("started_ended_at"),
     )
 
 
@@ -875,6 +878,54 @@ def get_order(order_no: str) -> Order:
     if row is None:
         raise HTTPException(status_code=404, detail=f"Ordre {order_no} findes ikke")
     return _to_order(row)
+
+
+@app.patch("/api/orders/{order_no}", response_model=Order, tags=["orders"])
+def edit_order(order_no: str, update: OrderUpdate) -> Order:
+    """Ret en ordre, der endnu ikke er sat i gang.
+
+    En tastefejl skal kunne rettes uden at ordren skal trækkes tilbage og
+    oprettes igen under et nyt nummer. Men kun indtil nogen har sat den i gang:
+    derefter har kørslen kopieret ordrens felter, og to forskellige svar på det
+    samme spørgsmål er værre end en tastefejl, der står.
+    """
+    existing = db.get_order(order_no)
+    if existing is None:
+        raise HTTPException(status_code=404, detail=f"Ordre {order_no} findes ikke")
+
+    fields = update.model_dump(exclude_unset=True)
+
+    known = {line.id for line in content.load_lines()}
+    if known and fields.get("line") and fields["line"].strip() not in known:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"Anlægget '{fields['line']}' findes ikke. Vælg et af: "
+                + ", ".join(sorted(known))
+            ),
+        )
+
+    # Partiet må ikke flyttes over på et, der allerede er kørt på en anden
+    # ordre. To ordrer på det samme lot ville give to kørsler med samme nøgle.
+    new_lot = (fields.get("lot_no") or "").strip()
+    if new_lot and new_lot != existing["lot_no"] and db.get_lot(new_lot) is not None:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Lot {new_lot} er allerede kørt på en anden ordre",
+        )
+
+    if db.update_order(order_no, fields) is None:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"Ordre {order_no} kan ikke rettes. Den er enten trukket "
+                "tilbage eller allerede sat i gang på linjen."
+            ),
+        )
+
+    # Læst forfra, så svaret bærer den samlede visning med kørslens tilstand
+    # og ikke bare den rå række.
+    return _to_order(db.get_order(order_no))
 
 
 @app.delete("/api/orders/{order_no}", response_model=Order, tags=["orders"])
