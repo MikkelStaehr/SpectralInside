@@ -1603,9 +1603,15 @@ p:last-child {
 
 /* Laboratoriet har en anden opbygning: ingen "koerer nu", og koeen er lots og
    ikke ordrer. Det ville vaere en loegn at tvinge det ned i de samme baand,
-   saa det flyder for sig selv i sin egen hoejde. */
+   saa det flyder for sig selv.
+
+   `align-self: start` er det, der goer det. Sporet spaender stadig over alle
+   raekker, saa dets overskrift staar i linje med de andres, men det straekker
+   sig ikke ned til bunden: uden den stod der en kasse paa 652 px med 217 px
+   indhold og 435 px luft, og en tom kasse laeses som noget, der mangler. */
 .track--analysis {
   grid-template-rows: none;
+  align-self: start;
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -1879,7 +1885,14 @@ p:last-child {
   font-variant-numeric: tabular-nums;
 }
 
-@media (max-width: 900px) {
+/* Sporene staar kun side om side, naar der er plads til dem alle.
+   3 x 420 px + to mellemrum + braettets margen er 1364 px, og under det blev
+   det tredje spor klemt til 156 px, mens siden rullede vandret. Braekket staar
+   derfor over den bredde og ikke ved 900.
+
+   Skaermen i produktionen er bred og rammer aldrig det her. Den samme side
+   aabnes paa en PC, og dér er én laesbar spalte bedre end tre klemte. */
+@media (max-width: 1400px) {
   /* Én spalte. Der er ikke laengere noget at flugte med, saa sporene maaler
      sig selv igen frem for at slaebe rundt paa naboens tomme baand. */
   .board__tracks {
