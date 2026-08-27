@@ -148,7 +148,12 @@ export function Board({ lines, lots, orders, onOpen, onStart }: Props) {
       ) : (
         <div className="board__tracks">
           {tracks.map((track) => (
-            <section className="track" key={track.line.id || "stray"}>
+            <section
+              className={`track${
+                track.line.kind === "analysis" ? " track--analysis" : ""
+              }`}
+              key={track.line.id || "stray"}
+            >
               <header className="track__head">
                 <h2>{track.line.label}</h2>
                 {track.line.lead && <p>{track.line.lead}</p>}
@@ -175,15 +180,13 @@ export function Board({ lines, lots, orders, onOpen, onStart }: Props) {
                         <li key={lot.lot_no}>
                           <button
                             type="button"
+                            className={
+                              lot.unacknowledged_count > 0 ? "is-alerting" : undefined
+                            }
                             onClick={() => onOpen(lot.lot_no)}
                           >
                             <span className="track__pos">{index + 1}</span>
-                            <span className="track__name">
-                              {lot.unacknowledged_count > 0 && (
-                                <span className="dot" aria-label="Nyt resultat" />
-                              )}
-                              {lot.lot_no}
-                            </span>
+                            <span className="track__name">{lot.lot_no}</span>
                             <span className="track__meta">
                               {lot.variety ? `${lot.variety} · ` : ""}
                               {/* Hvor partiet kom fra. Lottet skifter ikke
@@ -224,14 +227,14 @@ export function Board({ lines, lots, orders, onOpen, onStart }: Props) {
                           }`}
                           onClick={() => onOpen(lot.lot_no)}
                         >
-                          <span className="track__name">
-                            {/* Markeringen står også her. Et resultat, ingen har
-                                kvitteret for, skal kunne ses uden at gå ind. */}
-                            {lot.unacknowledged_count > 0 && (
-                              <span className="dot" aria-label="Nyt resultat" />
-                            )}
-                            {lot.lot_no}
-                          </span>
+                          {/* Tomt, men der. Køens rækker har et nummer i det
+                              her felt, og uden det ville navnene i de to
+                              lister stå 40 px fra hinanden ned ad
+                              venstrekanten. Alarmen sidder på rækkens kant og
+                              ikke som en prik i navnet: en prik inde i teksten
+                              skubber den. */}
+                          <span className="track__pos" aria-hidden="true" />
+                          <span className="track__name">{lot.lot_no}</span>
                           <span className="track__meta">
                             {lot.variety ? `${lot.variety} · ` : ""}
                             {lot.order_no ? `${lot.order_no} · ` : ""}
@@ -256,6 +259,11 @@ export function Board({ lines, lots, orders, onOpen, onStart }: Props) {
                   {track.queue.length > 0 && <em>{track.queue.length}</em>}
                 </p>
 
+                {/* Beskeden og køen i ét bånd. Sporet arver brættets rækker,
+                    så antallet af børn skal passe: et ekstra ville blive
+                    auto-placeret i den forkerte række. Se den samme fælde på
+                    process__lead og process__detail. */}
+                <div className="track__band">
                 {/* Ét parti ad gangen gennem anlægget. Er der et i gang, kan
                     det næste ikke sættes i gang, og så skal køen sige hvorfor
                     frem for at tilbyde et tryk, serveren afviser. Rækkerne
@@ -325,6 +333,7 @@ export function Board({ lines, lots, orders, onOpen, onStart }: Props) {
                     ))}
                   </ol>
                 )}
+                </div>
                 </>
               )}
 
@@ -362,6 +371,7 @@ export function Board({ lines, lots, orders, onOpen, onStart }: Props) {
                     className="track__active track__active--done"
                     onClick={() => onOpen(lot.lot_no)}
                   >
+                    <span className="track__pos" aria-hidden="true" />
                     <span className="track__name">{lot.lot_no}</span>
                     <span className="track__meta">
                       {lot.variety ? `${lot.variety} · ` : ""}

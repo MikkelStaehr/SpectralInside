@@ -1572,10 +1572,18 @@ p:last-child {
 }
 
 /* Sporene ved siden af hinanden. To anlaeg skal kunne ses i ét blik, og
-   under hinanden ville det andet ligge under skaermkanten. */
+   under hinanden ville det andet ligge under skaermkanten.
+
+   Braettet er ét gitter, og sporene arver dets raekker — samme greb som
+   proceskaeden. Uden det maaler hvert spor sig selv, og "I kø" staar i trappe,
+   fordi det ene anlaeg har et lot i gang og det andet ikke har.
+
+   De fem baand er: overskrift, "Kører nu"-etiket, det der koerer,
+   "I kø"-etiket, koeen. */
 .board__tracks {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
+  grid-template-rows: repeat(5, auto);
   gap: 24px;
 }
 
@@ -1585,6 +1593,27 @@ p:last-child {
   border-radius: var(--radius);
   background: var(--surface);
   padding: 24px 24px 26px;
+
+  grid-row: 1 / -1;
+  display: grid;
+  grid-template-rows: subgrid;
+  align-content: start;
+  row-gap: 10px;
+}
+
+/* Laboratoriet har en anden opbygning: ingen "koerer nu", og koeen er lots og
+   ikke ordrer. Det ville vaere en loegn at tvinge det ned i de samme baand,
+   saa det flyder for sig selv i sin egen hoejde. */
+.track--analysis {
+  grid-template-rows: none;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* Beskeden om et optaget anlaeg og selve koeen deler baand. */
+.track__band {
+  min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -1655,6 +1684,10 @@ p:last-child {
   gap: 8px;
 }
 
+/* Alle raekker har den samme kasse. Kanten til venstre er 3 px paa dem alle,
+   ogsaa hvor den er usynlig: var den 1 px paa koeen og 3 paa det der koerer,
+   ville navnene staa 2 px fra hinanden ned ad venstrekanten. Farven er det
+   eneste, der skifter. */
 .track__list button,
 .track__queue button {
   display: flex;
@@ -1664,6 +1697,7 @@ p:last-child {
   padding: 16px 18px;
   background: var(--surface);
   border: 1px solid var(--border);
+  border-left: 3px solid transparent;
   border-radius: var(--radius);
   font: inherit;
   color: inherit;
@@ -1677,19 +1711,26 @@ p:last-child {
 }
 
 /* Det, der koerer, er tungere end det, der venter. Kanten til venstre er den
-   eneste forskel, der behoeves: to fyldfarver ville sige det samme igen. */
+   eneste forskel, der behoeves: to fyldfarver ville sige det samme igen.
+   Kun farven saettes — bredden er den samme paa alle raekker. */
 .track__active {
-  border-left: 3px solid var(--text) !important;
+  border-left-color: var(--text);
 }
 
 .track__active--done {
-  border-left-color: var(--border-strong) !important;
+  border-left-color: var(--border-strong);
 }
 
+/* Navnet har sin egen spalte og ikke bare sin egen bredde. Uden en fast
+   mindstebredde begynder meta-teksten et nyt sted for hver raekke, fordi
+   lotnumre ikke er lige lange, og saa er navnets hoejrekant en trappe.
+   9ch er et lotnummer i tabulaere cifre; laengere numre skubber selv. */
 .track__name {
   font-size: 21px;
   font-weight: 600;
+  font-variant-numeric: tabular-nums;
   flex: none;
+  min-width: 9ch;
 }
 
 .track__meta {
@@ -1737,7 +1778,11 @@ p:last-child {
 }
 
 /* Koeens nummer og ikke ordrens. Det siger, hvad der koerer som det naeste,
-   og det er det, der spoerges om. */
+   og det er det, der spoerges om.
+
+   Feltet er der paa **alle** raekker, ogsaa hvor det staar tomt. Uden det ville
+   navnene i "koerer nu" og i koeen staa 40 px fra hinanden ned ad
+   venstrekanten, fordi kun den ene liste har et nummer. */
 .track__pos {
   flex: none;
   width: 26px;
@@ -1787,6 +1832,7 @@ p:last-child {
 .track__queue.is-blocked button {
   cursor: default;
   border-style: dashed;
+  border-left-style: solid;
   color: var(--text-muted);
 }
 
@@ -1834,8 +1880,18 @@ p:last-child {
 }
 
 @media (max-width: 900px) {
+  /* Én spalte. Der er ikke laengere noget at flugte med, saa sporene maaler
+     sig selv igen frem for at slaebe rundt paa naboens tomme baand. */
   .board__tracks {
     grid-template-columns: 1fr;
+    grid-template-rows: none;
+  }
+
+  .track {
+    grid-row: auto;
+    grid-template-rows: none;
+    display: flex;
+    flex-direction: column;
   }
 }
 
@@ -5021,14 +5077,22 @@ p:last-child {
 
 /* Markeringen paa lot-listen, altsaa forsiden til operatoerskaermen. */
 .display__samples button.is-alerting,
-.track__list button.is-alerting {
+.track__list button.is-alerting,
+.track__queue button.is-alerting {
   border-color: var(--danger-fg);
 }
 
-/* Kanten til venstre er kortets tyngde og skal ogsaa skifte, ellers staar der
+/* Alarmen paa kanten og ikke som en prik i navnet. En prik inde i teksten
+   skubber den, og saa staar en raekke med nyt resultat anderledes end en uden.
+   Kanten koster ingen bredde, for den er der i forvejen. */
+.track__queue button.is-alerting {
+  border-left-color: var(--danger-fg);
+}
+
+/* Kanten til venstre er raekkens tyngde og skal ogsaa skifte, ellers staar der
    en roed ramme med en sort streg i den ene side. */
 .track__active.is-alerting {
-  border-left-color: var(--danger-fg) !important;
+  border-left-color: var(--danger-fg);
 }
 
 .display__sample-name .dot,
