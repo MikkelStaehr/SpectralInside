@@ -1065,6 +1065,29 @@ def cancel_order(order_no: str) -> Row | None:
 # --- Lots ---------------------------------------------------------------------
 
 
+def active_lot_on(line: str) -> Row | None:
+    """Det lot, der kører på linjen lige nu. Der kan kun være ét.
+
+    Aktiv betyder: sat i gang, ikke meldt færdig på linjen, ikke stemplet. Et
+    parti, operatøren har overleveret til laboratoriet, optager ikke linjen —
+    det står i analysekøen, og linjen er fri til det næste.
+
+    Reglen er fysisk: der kører ét parti gennem anlægget ad gangen. Derfor
+    spørges der her og ikke i grænsefladen alene.
+    """
+    return _run(
+        lambda conn: conn.execute(
+            """
+            SELECT * FROM lots
+            WHERE line = %s AND ended_at IS NULL AND stamp IS NULL
+            ORDER BY started_at DESC
+            LIMIT 1
+            """,
+            (line,),
+        ).fetchone()
+    )
+
+
 def get_lot(lot_no: str) -> Row | None:
     return _run(
         lambda conn: conn.execute(

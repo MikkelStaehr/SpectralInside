@@ -620,6 +620,14 @@ Trinnene er fire, og de har ikke samme ejer:
 | 3 | Finalizing | operatør |
 | 4 | Post Cleaning | laboratoriet |
 
+**Ét parti ad gangen gennem et anlæg.** Er der et lot i gang på en linje, kan
+det næste i køen ikke sættes i gang. Reglen er fysisk, så den står i API'et og
+ikke kun i knappen: `POST /api/lots` svarer 409, og brættet spærrer køen med en
+begrundelse frem for at tilbyde et tryk, der bliver afvist.
+
+Et parti, operatøren har meldt færdigt på linjen, optager den ikke. Det er
+flyttet over i laboratoriets kø, og anlægget er frit til det næste.
+
 **Finalizing er operatørens sidste trin.** Post Cleaning er rent analytisk:
 laboratoriets dom over færdigvaren, og der står ingen ved linjen, som kan gøre
 noget ved tallet. Det er derfor `Process.owner` findes — skærmen holder op med

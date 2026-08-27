@@ -1140,6 +1140,22 @@ def create_lot(lot: NewLot) -> LotSummary:
             status_code=409, detail=f"Lot {order['lot_no']} er allerede startet"
         )
 
+    # Ét parti ad gangen gennem anlægget. Reglen er fysisk, ikke en præference,
+    # og derfor står den her og ikke kun i knappen på skærmen.
+    #
+    # Et parti, operatøren har meldt færdigt på linjen, optager den ikke: det
+    # står i laboratoriets kø, og anlægget er frit til det næste.
+    if order["line"]:
+        busy = db.active_lot_on(order["line"])
+        if busy is not None:
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    f"Lot {busy['lot_no']} kører allerede på anlægget. Meld det "
+                    "færdigt på linjen, før det næste sættes i gang."
+                ),
+            )
+
     # Kun felter, der står i LOT_FIELDS, når frem til en kolonne. Listen er
     # domænets, ikke skemaets, så en model med et felt for meget kan ikke
     # skrive udenom den.

@@ -1750,6 +1750,37 @@ p:last-child {
   color: var(--border-strong);
 }
 
+/* Anlaegget er optaget. Koeen bliver staaende og kan laeses — den er en plan —
+   men den kan ikke saettes i gang, og raekkerne skal ikke se ud som om. */
+.track__blocked {
+  margin: 0 0 4px;
+  display: flex;
+  align-items: baseline;
+  gap: 9px;
+  font-size: 15px;
+  color: var(--text-muted);
+}
+
+.track__blocked svg {
+  flex: none;
+  position: relative;
+  top: 2px;
+}
+
+.track__queue.is-blocked button {
+  cursor: default;
+  border-style: dashed;
+  color: var(--text-muted);
+}
+
+.track__queue.is-blocked button:hover {
+  border-color: var(--border);
+}
+
+.track__queue.is-blocked .track__go {
+  color: var(--border-strong);
+}
+
 /* Koerte lots ligger sammenfoldet. De skal kunne findes, men de er ikke det,
    skaermen handler om. */
 .board__done {

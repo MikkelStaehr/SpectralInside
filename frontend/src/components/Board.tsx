@@ -95,13 +95,18 @@ export function Board({ lines, lots, orders, onOpen, onStart }: Props) {
     // dem, operatøren er færdig med, og køen er lots og ikke ordrer.
     const named = lines.map((line) =>
       line.kind === "analysis"
-        ? { line, running: [] as LotSummary[], queue: [], waiting }
-        : {
-            line,
-            running: running.filter((lot) => belongs(lot.line, line.id)),
-            queue: orders.filter((order) => belongs(order.line, line.id)),
-            waiting: [] as LotSummary[],
-          },
+        ? { line, running: [] as LotSummary[], queue: [], waiting, busy: false }
+        : (() => {
+            const onLine = running.filter((lot) => belongs(lot.line, line.id));
+            return {
+              line,
+              running: onLine,
+              queue: orders.filter((order) => belongs(order.line, line.id)),
+              waiting: [] as LotSummary[],
+              // Ét parti ad gangen. Er der et i gang, er anlægget optaget.
+              busy: onLine.length > 0,
+            };
+          })(),
     );
 
     const stray = {
@@ -109,6 +114,7 @@ export function Board({ lines, lots, orders, onOpen, onStart }: Props) {
       running: running.filter((lot) => !lot.line || !known.has(lot.line)),
       queue: orders.filter((order) => !order.line || !known.has(order.line)),
       waiting: [] as LotSummary[],
+      busy: false,
     };
 
     return stray.running.length + stray.queue.length > 0
@@ -250,16 +256,33 @@ export function Board({ lines, lots, orders, onOpen, onStart }: Props) {
                   {track.queue.length > 0 && <em>{track.queue.length}</em>}
                 </p>
 
+                {/* Ét parti ad gangen gennem anlægget. Er der et i gang, kan
+                    det næste ikke sættes i gang, og så skal køen sige hvorfor
+                    frem for at tilbyde et tryk, serveren afviser. Rækkerne
+                    bliver stående og kan stadig åbnes: køen er en plan, og den
+                    skal kunne læses, også mens den venter. */}
+                {track.busy && track.queue.length > 0 && (
+                  <p className="track__blocked">
+                    <Icon name="info" size={15} strokeWidth={2.2} />
+                    {track.running[0].lot_no} kører. Meld det færdigt på linjen,
+                    før det næste sættes i gang.
+                  </p>
+                )}
+
                 {track.queue.length === 0 ? (
                   <p className="track__idle">
                     Ingen ordrer i kø. Kommer der en fra ordrekontoret, dukker den
                     op her af sig selv.
                   </p>
                 ) : (
-                  <ol className="track__queue">
+                  <ol className={`track__queue${track.busy ? " is-blocked" : ""}`}>
                     {track.queue.map((order, index) => (
                       <li key={order.order_no}>
-                        <button type="button" onClick={() => onStart(order)}>
+                        <button
+                          type="button"
+                          disabled={track.busy}
+                          onClick={() => onStart(order)}
+                        >
                           {/* Nummeret er køens og ikke ordrens. Det siger, hvad
                               der kører som det næste, og det er det, der
                               spørges om. */}
@@ -283,7 +306,7 @@ export function Board({ lines, lots, orders, onOpen, onStart }: Props) {
                               "Start nu" på nummer to er en opfordring til at
                               køre uden om planen. */}
                           <span className="track__go">
-                            {index === 0 && "Start"}
+                            {index === 0 && !track.busy && "Start"}
                             <Icon name="chevron-right" size={18} />
                           </span>
                         </button>
