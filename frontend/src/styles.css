@@ -4193,6 +4193,14 @@ p:last-child {
   font-size: 15px;
 }
 
+/* Kontakten og tabellen i ét baand, saa kortet beholder det antal boern,
+   kaedens raekker forventer. Se process__lead for den samme sag. */
+.process__detail {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
 /* Testtypen over tabellen. En stille kontakt og ikke en fanerraekke: den
    vaelger kun, hvilken tabel der staar nedenunder, mens fanerne oeverst skifter
    hele proevestroemmen. To lige tunge kontakter ville laere ingen, hvad der er

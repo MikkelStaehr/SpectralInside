@@ -379,7 +379,12 @@ export function ProcessCard({
           {places.length > 1 ? ` på ${placeLabel}` : " på dette trin"} endnu.
         </p>
       ) : (
-        <>
+        /* Kontakten og tabellen i ét element. Kortet arver kædens fem rækker,
+           så antallet af børn skal passe: lægger man et ekstra ind, bliver det
+           auto-placeret i den række, foden er bundet til, og så ligger
+           "Kvittér for resultat" oven i tabellen. Se den samme fælde på
+           process__lead. */
+        <div className="process__detail">
           {/* Testtypen vælger kun tabellen nedenunder, så den er en stille
               kontakt og ikke en fanerække. Er der kun én, står den som en
               etiket: der er ikke noget at vælge imellem. */}
@@ -430,7 +435,7 @@ export function ProcessCard({
               ))}
             </ul>
           )}
-        </>
+        </div>
       )}
 
       {/* Foden ligger i kortets sidste bånd og er bundstillet, så knappen
