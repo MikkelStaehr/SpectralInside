@@ -18,7 +18,7 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
 import { parseDecimal } from "../lots";
-import type { Line, Order } from "../types";
+import type { Line, NavisionDraft, Order } from "../types";
 import { Icon } from "./Icon";
 
 interface Props {
@@ -112,6 +112,56 @@ export function OrderSheet({ createdBy, order, lines, onClose, onSaved }: Props)
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Det, Navision svarede. Gemmes ved siden af felterne, fordi advarslerne
+  // skal blive stående, mens kontoret retter: de siger, hvad Navision ikke
+  // vidste, og det er stadig sandt, efter man har udfyldt det.
+  const [draft, setDraft] = useState<NavisionDraft | null>(null);
+  const [fetching, setFetching] = useState(false);
+
+  /**
+   * Hent ordren fra Navision og fyld felterne ud.
+   *
+   * Det, kontoret allerede har skrevet, bliver stående. Et opslag, der
+   * overskrev en rettelse, ville gøre knappen farlig at trykke på, og så
+   * bliver den ikke brugt.
+   */
+  const lookup = async () => {
+    const no = (values.order_no ?? "").trim();
+    if (!no) {
+      setError("Skriv et ordrenummer først.");
+      return;
+    }
+
+    setFetching(true);
+    setError(null);
+    try {
+      const found = await api.navisionOrder(no);
+      setDraft(found);
+      setValues((current) => {
+        const next = { ...current };
+        const put = (id: string, value: unknown) => {
+          if (value === null || value === undefined) return;
+          if ((current[id] ?? "").trim() !== "") return;
+          next[id] =
+            id === "planned_start" ? toLocal(String(value)) : String(value);
+        };
+        put("item_no", found.item_no);
+        put("variety", found.variety);
+        put("line", found.line);
+        put("lot_no", found.lot_no);
+        put("planned_kg", found.planned_kg);
+        put("planned_start", found.planned_start);
+        return next;
+      });
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Kunne ikke hente fra Navision",
+      );
+    } finally {
+      setFetching(false);
+    }
+  };
+
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.key === "Escape") onClose();
@@ -155,6 +205,19 @@ export function OrderSheet({ createdBy, order, lines, onClose, onSaved }: Props)
           body[f.id] = raw === "" ? null : raw;
         }
       }
+      // Navisions egne felter følger med, når ordren er hentet. De gemmes
+      // som de kom, så en senere opdatering kan se, hvad der har ændret sig.
+      if (draft) {
+        body.source_status = draft.source_status;
+        body.source_routing = draft.source_routing;
+        body.source_variant = draft.source_variant;
+        body.source_location = draft.source_location;
+        body.source_weight_type = draft.source_weight_type;
+        body.planned_end = draft.planned_end;
+        body.due_date = draft.due_date;
+        body.source_modified_at = draft.source_modified_at;
+      }
+
       const saved = editing
         ? await api.updateOrder(order.order_no, body)
         : await api.createOrder(body);
@@ -201,6 +264,40 @@ export function OrderSheet({ createdBy, order, lines, onClose, onSaved }: Props)
         )}
 
         <div className="sheet__body">
+          {/* Opslaget står øverst, hvor nummeret alligevel tastes. Det er
+              hele forskellen på at udfylde ni felter og at skrive ét. */}
+          <div className="navision">
+            <button
+              type="button"
+              className="btn btn--ghost"
+              disabled={fetching || busy}
+              onClick={() => void lookup()}
+            >
+              <Icon name="rotate-ccw" size={16} strokeWidth={2.2} />
+              {editing ? "Opdatér fra Navision" : "Hent information"}
+            </button>
+            <p>
+              {draft
+                ? `Hentet fra Navision${
+                    draft.source_status ? ` · ${draft.source_status}` : ""
+                  }${draft.description ? ` · ${draft.description}` : ""}`
+                : "Skriv ordrenummeret, og hent resten."}
+            </p>
+          </div>
+
+          {/* Det, Navision ikke vidste, sagt højt. En ordre, der lander med et
+              tomt felt uden en forklaring, bliver gemt med hullet i. */}
+          {draft && draft.warnings.length > 0 && (
+            <ul className="navision__warnings">
+              {draft.warnings.map((w) => (
+                <li key={w}>
+                  <Icon name="info" size={15} strokeWidth={2.2} />
+                  {w}
+                </li>
+              ))}
+            </ul>
+          )}
+
           <p className="sheet__lead">
             {editing
               ? "Ordren er ikke sat i gang endnu, så den kan stadig rettes. Er den først kørt, skal rettelsen ske på kørslen."

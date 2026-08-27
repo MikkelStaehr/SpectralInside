@@ -339,6 +339,19 @@ export interface Order {
   created_at: string;
   created_by: string | null;
   cancelled_at: string | null;
+  // Fra Navision. Hentet og ikke tastet.
+  source_status: string | null;
+  source_routing: string | null;
+  source_variant: string | null;
+  source_location: string | null;
+  /** Brutto eller netto. Et vaegttal uden den oplysning er ikke et vaegttal. */
+  source_weight_type: string | null;
+  planned_end: string | null;
+  due_date: string | null;
+  /** Hvornaar Navision sidst rettede ordren. */
+  source_modified_at: string | null;
+  /** Hvornaar vi sidst hentede den. Forskellen er "er der en opdatering". */
+  source_fetched_at: string | null;
   /** Koerslen paa ordren, hvis den er startet. Udledt og ikke gemt. */
   started_lot: string | null;
   started_at: string | null;
@@ -357,6 +370,11 @@ export interface Order {
 export interface Line {
   id: string;
   label: string;
+  /**
+   * Navisions Routing No. for anlaegget, fx CLEAN2. Det er den, der goer, at
+   * en hentet ordre selv finder sit spor.
+   */
+  routing: string | null;
   /**
    * Hvad slags koe sporet har. En renselinje har en koe af ordrer, som
    * operatoeren saetter i gang. Laboratoriet har en koe af lots, som
@@ -381,6 +399,35 @@ export interface Operation {
   /** Processer, der ikke kan afsluttes uden et resultat for den her operation. */
   required_for: ProcessId[];
   procedure: string | null;
+}
+
+/**
+ * Det, Navision svarer, klar til at blive til en ordre.
+ *
+ * Ikke en ordre endnu. Ordrekontoret ser udkastet, retter det, Navision ikke
+ * ved — partiet frem for alt — og gemmer.
+ */
+export interface NavisionDraft {
+  order_no: string;
+  item_no: string | null;
+  variety: string | null;
+  /** Udledt af Routing No. Tom, hvis routingen ikke er koblet til et anlaeg. */
+  line: string | null;
+  lot_no: string | null;
+  planned_kg: number | null;
+  planned_start: string | null;
+  planned_end: string | null;
+  due_date: string | null;
+  source_status: string | null;
+  source_routing: string | null;
+  source_variant: string | null;
+  source_location: string | null;
+  source_weight_type: string | null;
+  source_modified_at: string | null;
+  created_by: string | null;
+  description: string | null;
+  /** Det, der ikke kunne udledes, sagt hoejt. */
+  warnings: string[];
 }
 
 export interface LotMeta {

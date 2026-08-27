@@ -17,7 +17,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import __version__, blobdb, classifiers, config, content, db, lots, sync
+from . import __version__, blobdb, classifiers, config, content, db, lots, navision, sync
 from .schemas import (
     Acknowledgement,
     Band,
@@ -40,6 +40,7 @@ from .schemas import (
     SetupUpdate,
     SetupValue,
     MaintenanceReminder,
+    NavisionDraft,
     NewLot,
     NewOrder,
     NewSample,
@@ -795,6 +796,74 @@ def _to_lot_summary(row) -> LotSummary:
     )
 
 
+def _to_draft(found: navision.NavisionOrder) -> NavisionDraft:
+    """Navisions ordre til et udkast, kontoret kan se på.
+
+    Det, der ikke kunne udledes, siges højt. En ordre, der lander med et tomt
+    felt uden en forklaring, bliver gemt med hullet i.
+    """
+    warnings: list[str] = []
+
+    lines = content.load_lines()
+    line = next(
+        (
+            l.id
+            for l in lines
+            if l.routing
+            and found.routing_no
+            and l.routing.casefold() == found.routing_no.casefold()
+        ),
+        None,
+    )
+    if found.routing_no and line is None:
+        known = ", ".join(sorted(l.routing for l in lines if l.routing)) or "ingen"
+        warnings.append(
+            f"Routing '{found.routing_no}' er ikke koblet til et anlæg. "
+            f"Kendte routings: {known}. Vælg anlæg i hånden, eller skriv "
+            "koblingen i content/lines.yaml."
+        )
+    elif not found.routing_no:
+        warnings.append("Ordren har ingen Routing No. Vælg anlæg i hånden.")
+
+    # Partiet står ikke på produktionsordrens hoved. Det er den ene ting,
+    # kontoret altid selv skal skrive, indtil vi ved, hvor Navision gemmer det.
+    warnings.append(
+        "Partiet (Ind lot nr.) står ikke på produktionsordren. Skriv det ind."
+    )
+
+    if found.status and found.status.casefold() != "released":
+        warnings.append(
+            f"Ordren står som '{found.status}' i Navision og ikke Released."
+        )
+
+    if found.quantity is not None and not found.weight_type:
+        warnings.append(
+            "Mængden har ingen Weight Type. Det er uklart, om den er brutto "
+            "eller netto."
+        )
+
+    return NavisionDraft(
+        order_no=found.order_no,
+        item_no=found.item_no,
+        variety=None,
+        line=line,
+        lot_no=None,
+        planned_kg=found.quantity,
+        planned_start=found.starting_at,
+        planned_end=found.ending_at,
+        due_date=found.due_date,
+        source_status=found.status,
+        source_routing=found.routing_no,
+        source_variant=found.variant,
+        source_location=found.location,
+        source_weight_type=found.weight_type,
+        source_modified_at=found.modified_at,
+        created_by=found.created_by,
+        description=found.description,
+        warnings=warnings,
+    )
+
+
 def _to_order(row) -> Order:
     return Order(
         order_no=row["order_no"],
@@ -805,6 +874,15 @@ def _to_order(row) -> Order:
         planned_kg=row["planned_kg"],
         planned_start=row["planned_start"],
         note=row["note"],
+        source_status=row.get("source_status"),
+        source_routing=row.get("source_routing"),
+        source_variant=row.get("source_variant"),
+        source_location=row.get("source_location"),
+        source_weight_type=row.get("source_weight_type"),
+        planned_end=row.get("planned_end"),
+        due_date=row.get("due_date"),
+        source_modified_at=row.get("source_modified_at"),
+        source_fetched_at=row.get("source_fetched_at"),
         created_at=row["created_at"],
         created_by=row["created_by"],
         cancelled_at=row["cancelled_at"],
@@ -860,19 +938,44 @@ def create_order(order: NewOrder) -> Order:
             ),
         )
 
-    return _to_order(
-        db.add_order(
-            order.order_no,
-            order.lot_no,
-            order.item_no,
-            order.variety,
-            order.line,
-            order.planned_kg,
-            order.planned_start,
-            order.note,
-            order.created_by,
+    fields = order.model_dump(exclude={"order_no", "lot_no"})
+    if any(fields.get(k) for k in ("source_status", "source_routing")):
+        # Hentet og ikke tastet. Tidspunktet er grundlaget for "er der kommet
+        # en opdatering siden", sammen med Navisions eget modified_at.
+        fields["source_fetched_at"] = db.now()
+    return _to_order(db.add_order(order.order_no, order.lot_no, **fields))
+
+
+@app.get(
+    "/api/navision/orders/{order_no}",
+    response_model=NavisionDraft,
+    tags=["orders"],
+)
+def navision_order(order_no: str) -> NavisionDraft:
+    """Slå en produktionsordre op i Navision.
+
+    Ordrekontoret skriver et nummer, trykker hent, og resten udfyldes. Svaret
+    er et **udkast** og ikke en ordre: kontoret ser det, retter det, Navision
+    ikke ved, og gemmer. Et udkast, der blev til en ordre uden at nogen så det,
+    ville lægge Navisions huller ind i vores database, uden at nogen opdagede
+    dem.
+
+    Routing No. oversættes til vores anlæg gennem content/lines.yaml. Det er
+    hele grunden til, at kontoret ikke skal vælge linje: Navision har allerede
+    bestemt det.
+    """
+    try:
+        found = navision.fetch(order_no)
+    except navision.NavisionError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+    if found is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Ordre {order_no} findes ikke i Navision.",
         )
-    )
+
+    return _to_draft(found)
 
 
 @app.get("/api/orders/{order_no}", response_model=Order, tags=["orders"])

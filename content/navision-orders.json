@@ -1,0 +1,45 @@
+{
+  "_om_filen": [
+    "Produktionsordrer fra Navision, som applikationen slår op i.",
+    "",
+    "Transporten til Navision er ikke besluttet endnu. Indtil den er, læses",
+    "ordrerne herfra, og filen læses ved hvert opslag: læg en ny eksport, og",
+    "den slår igennem uden genstart.",
+    "",
+    "Feltnavnene er Navisions egne. Flere stavemåder genkendes ('No.', 'No',",
+    "'No_'), fordi en OData-tjeneste, en SQL-visning og en CSV-eksport staver",
+    "dem forskelligt. Se app/navision.py.",
+    "",
+    "Posten herunder er den ordre, jeg har fået felterne fra. Den står her",
+    "som eksempel og som noget at afprøve flowet med. Erstat den med en",
+    "rigtig eksport."
+  ],
+  "orders": [
+    {
+      "No.": "P043040",
+      "Status": "Released",
+      "Description": "C09600G13300/L46700",
+      "Search Description": "C09600G13300/L46700",
+      "Firm Planned Order No.": "P043040",
+      "No. Series": "M-PRODORD",
+      "Source Type": "Item",
+      "Source No.": "502F12432RDY",
+      "Variant Code": "OCT",
+      "Item Segment Code": "PRODUCTION",
+      "Gen. Prod. Posting Group": "OTHER_SEED",
+      "Quantity": 3338,
+      "Weight Type": "Gross",
+      "Routing No.": "CLEAN2",
+      "Order type": "PROCESSING",
+      "Sales Item Types": "All",
+      "Quality Category Code": "000",
+      "Starting Date-Time": "18-08-2026 06:00",
+      "Ending Date-Time": "18-08-2026 23:59",
+      "Due Date": "18-08-2026",
+      "Creation Date": "18-08-2026",
+      "Last Date Modified": "18-08-2026",
+      "Location Code": "SH",
+      "User ID": "DSGROUPEFD\\HCH"
+    }
+  ]
+}

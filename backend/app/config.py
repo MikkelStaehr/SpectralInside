@@ -26,6 +26,12 @@ MACHINE_SETUP_FILE = CONTENT_DIR / "machine-setup.yaml"
 LINES_FILE = CONTENT_DIR / "lines.yaml"
 OPERATIONS_FILE = CONTENT_DIR / "operations.yaml"
 
+# Navision-eksporten. Se app/navision.py: transporten er ikke besluttet endnu,
+# og indtil den er, laeses ordrerne fra en fil, som kan lagges her.
+NAVISION_FILE = _path_from_env(
+    "UBS_NAVISION_FILE", CONTENT_DIR / "navision-orders.json"
+)
+
 DB_PATH = _path_from_env("UBS_DB_PATH", BACKEND_DIR / "data" / "ubs.db")
 
 # Postgres hos Supabase. Beskeder, vedligeholdelseslog og daglige procedurer

@@ -200,6 +200,26 @@ CREATE TABLE IF NOT EXISTS orders (
 
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS planned_start TIMESTAMPTZ;
 
+-- Det, Navision siger. Se app/navision.py for koblingen.
+--
+-- Hentet og ikke tastet: ordrekontoret slaar ordrenummeret op, og resten
+-- udfyldes. Felterne staar hver for sig og ikke som én JSON-klump, fordi de
+-- skal kunne soeges og vises — status afgoer, om ordren maa saettes i gang.
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS source_status     TEXT;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS source_routing    TEXT;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS source_variant    TEXT;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS source_location   TEXT;
+-- Vaegten er brutto eller netto, og et tal uden den oplysning er ikke et
+-- vaegttal. planned_kg baerer selve tallet.
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS source_weight_type TEXT;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS planned_end       TIMESTAMPTZ;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS due_date          TIMESTAMPTZ;
+-- Naar Navision sidst rettede ordren, og naar vi sidst hentede den. Forskellen
+-- er hele "er der kommet en opdatering": uden de to skulle vi sammenligne felt
+-- for felt, og saa opdages en rettelse foerst, naar nogen kigger.
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS source_modified_at TIMESTAMPTZ;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS source_fetched_at  TIMESTAMPTZ;
+
 -- Koeen laeses forfra, ikke bagfra: den aeldste ordre er den naeste, der skal
 -- koere. Derfor stigende og ikke faldende. Den gamle sortering paa created_at
 -- alene er afloest.
@@ -969,44 +989,49 @@ def get_order(order_no: str) -> Row | None:
     )
 
 
-def add_order(
-    order_no: str,
-    lot_no: str,
-    item_no: str | None,
-    variety: str | None,
-    line: str | None,
-    planned_kg: float | None,
-    planned_start: datetime | None,
-    note: str | None,
-    created_by: str | None,
-) -> Row:
+def add_order(order_no: str, lot_no: str, **fields: Any) -> Row:
+    """Opret ordren.
+
+    Felterne kommer ind frit, fordi listen voksede med Navision og vil vokse
+    igen. Kun kendte navne slipper igennem: main.py filtrerer mod
+    ``ORDER_FIELDS``, saa et ukendt felt aldrig naar hertil.
+    """
+    columns = ["order_no", "lot_no", "created_at"]
+    values: list[Any] = [order_no.strip(), lot_no.strip(), now()]
+    for name, value in fields.items():
+        columns.append(name)
+        values.append(_clean_order(name, value))
+
+    holes = ", ".join(["%s"] * len(columns))
     return _run(
         lambda conn: conn.execute(
-            """
-            INSERT INTO orders
-                (order_no, lot_no, item_no, variety, line, planned_kg,
-                 planned_start, note, created_at, created_by)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-            RETURNING *
-            """,
-            (
-                order_no.strip(),
-                lot_no.strip(),
-                (item_no or "").strip() or None,
-                (variety or "").strip() or None,
-                (line or "").strip() or None,
-                planned_kg,
-                planned_start,
-                (note or "").strip() or None,
-                now(),
-                (created_by or "").strip() or None,
-            ),
+            f"INSERT INTO orders ({', '.join(columns)}) VALUES ({holes}) RETURNING *",
+            tuple(values),
         ).fetchone()
     )
 
 
-#: Ordrefelter, der er tekst. Tom streng bliver til NULL, se _clean.
-_ORDER_TEXT = ("lot_no", "item_no", "variety", "line", "note")
+#: Ordrefelter, der er tekst. Tom streng bliver til NULL.
+_ORDER_TEXT = (
+    "lot_no",
+    "item_no",
+    "variety",
+    "line",
+    "note",
+    "created_by",
+    "source_status",
+    "source_routing",
+    "source_variant",
+    "source_location",
+    "source_weight_type",
+)
+
+
+def _clean_order(field: str, value: Any) -> Any:
+    """Tom streng er ikke en vaerdi. Se _clean for den samme sag paa lots."""
+    if field in _ORDER_TEXT and isinstance(value, str):
+        return value.strip() or None
+    return value
 
 
 def update_order(order_no: str, fields: dict[str, Any]) -> Row | None:
@@ -1021,12 +1046,7 @@ def update_order(order_no: str, fields: dict[str, Any]) -> Row | None:
         return get_order(order_no)
 
     sets = ", ".join(f"{name} = %s" for name in fields)
-    values = [
-        (value.strip() or None)
-        if name in _ORDER_TEXT and isinstance(value, str)
-        else value
-        for name, value in fields.items()
-    ]
+    values = [_clean_order(name, value) for name, value in fields.items()]
     values.extend([order_no, order_no])
     return _run(
         lambda conn: conn.execute(

@@ -4479,6 +4479,49 @@ p:last-child {
   color: var(--ok-fg);
 }
 
+/* Opslaget i Navision. Staar oeverst i ordrearket, hvor nummeret alligevel
+   tastes: det er hele forskellen paa at udfylde ni felter og at skrive ét. */
+.navision {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-bottom: 22px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--border);
+}
+
+.navision p {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+/* Det, Navision ikke vidste. Rolig og ikke roed: det er oplysninger om, hvad
+   der mangler, og ikke en fejl i det, der blev hentet. */
+.navision__warnings {
+  list-style: none;
+  margin: 0 0 22px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.navision__warnings li {
+  display: flex;
+  align-items: baseline;
+  gap: 9px;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.navision__warnings svg {
+  flex: none;
+  position: relative;
+  top: 2px;
+}
+
 /* --- Ordrebogen ------------------------------------------------------------ */
 /*
    Bygget om ordrens liv og ikke om en tabel: lagt ind, i koe, sat i gang,

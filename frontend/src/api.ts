@@ -13,6 +13,7 @@ import type {
   LotSample,
   LotSetup,
   LotSummary,
+  NavisionDraft,
   Order,
   SetupOptions,
   SetupValue,
@@ -138,6 +139,15 @@ export const api = {
     request<Order[]>(`/orders?open_only=${openOnly}`),
   order: (orderNo: string) =>
     request<Order>(`/orders/${encodeURIComponent(orderNo)}`),
+  /**
+   * Slaa en produktionsordre op i Navision.
+   *
+   * Svaret er et udkast og ikke en ordre. Kontoret ser det, retter det,
+   * Navision ikke ved, og gemmer.
+   */
+  navisionOrder: (orderNo: string) =>
+    request<NavisionDraft>(`/navision/orders/${encodeURIComponent(orderNo)}`),
+
   createOrder: (order: Record<string, unknown>) =>
     request<Order>("/orders", { method: "POST", body: JSON.stringify(order) }),
   /** Ret en ordre, der endnu ikke er sat i gang. Kun de naevnte felter roeres. */

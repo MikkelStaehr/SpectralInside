@@ -220,6 +220,7 @@ def load_lines() -> list[Line]:
             Line(
                 id=line_id,
                 label=str(entry.get("label") or line_id).strip(),
+                routing=str(entry.get("routing") or "").strip() or None,
                 kind=kind,
                 lead=str(entry.get("lead") or "").strip() or None,
             )

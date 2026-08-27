@@ -31,21 +31,31 @@
 # operatøren har meldt færdige, uanset hvilken linje de kom fra.
 #
 # Felter:
-#   id     kort og stabilt. Står i databasen på lot og ordre.
-#   label  det operatøren læser
-#   kind   cleaning eller analysis. Standard er cleaning
-#   lead   valgfri linje under navnet, fx hvad anlægget kører
+#   id       kort og stabilt. Står i databasen på lot og ordre.
+#   label    det operatøren læser
+#   kind     cleaning eller analysis. Standard er cleaning
+#   lead     valgfri linje under navnet, fx hvad anlægget kører
+#   routing  Navisions Routing No. for anlægget, fx CLEAN2. Det er den, der
+#            gør, at en hentet ordre selv finder sit spor — ordrekontoret
+#            skal ikke vælge anlæg, når Navision allerede har bestemt det.
+#
+# ADVARSEL: routing-koderne er gættet ud fra ét eksempel, hvor Routing No. var
+# CLEAN2. At Linje 1 så hedder CLEAN1 er en antagelse. Slå dem op i Navision
+# og ret dem her — det er den ene kobling, der afgør, hvor en hentet ordre
+# lander.
 
 lines:
   - id: "1"
     label: Linje 1
     kind: cleaning
     lead: Renselinje
+    routing: CLEAN1
 
   - id: "2"
     label: Linje 2
     kind: cleaning
     lead: Renselinje
+    routing: CLEAN2
 
   - id: analyse
     label: Analyse

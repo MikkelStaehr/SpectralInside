@@ -416,6 +416,13 @@ class Line(BaseModel):
 
     id: str
     label: str
+    routing: str | None = Field(
+        default=None,
+        description=(
+            "Navisions Routing No. for anlægget, fx CLEAN2. Det er den, der "
+            "gør, at en hentet ordre selv finder sit spor."
+        ),
+    )
     kind: Literal["cleaning", "analysis"] = Field(
         default="cleaning",
         description=(
@@ -477,6 +484,40 @@ class Order(BaseModel):
         description="Hvornår kørslen blev afsluttet, hvis nogen har sat det.",
     )
 
+    # --- Fra Navision ------------------------------------------------------
+    #
+    # Hentet og ikke tastet. Se app/navision.py for koblingen.
+    source_status: str | None = Field(
+        default=None,
+        description=(
+            "Navisions Status: Released, Firm Planned, Finished. Kun en "
+            "frigivet ordre bør sættes i gang på linjen."
+        ),
+    )
+    source_routing: str | None = None
+    source_variant: str | None = None
+    source_location: str | None = None
+    source_weight_type: str | None = Field(
+        default=None,
+        description=(
+            "Brutto eller netto. Et vægttal uden den oplysning er ikke et "
+            "vægttal, det er et tal."
+        ),
+    )
+    planned_end: datetime | None = None
+    due_date: datetime | None = None
+    source_modified_at: datetime | None = Field(
+        default=None,
+        description="Hvornår Navision sidst rettede ordren.",
+    )
+    source_fetched_at: datetime | None = Field(
+        default=None,
+        description=(
+            "Hvornår vi sidst hentede den. Forskellen til source_modified_at "
+            "er hele 'er der kommet en opdatering'."
+        ),
+    )
+
 
 class OrderUpdate(BaseModel):
     """Rettelse af en ordre, der endnu ikke er sat i gang.
@@ -496,6 +537,56 @@ class OrderUpdate(BaseModel):
     planned_kg: float | None = Field(default=None, ge=0)
     planned_start: datetime | None = None
     note: str | None = Field(default=None, max_length=500)
+
+
+class NavisionDraft(BaseModel):
+    """Det, Navision svarer, klar til at blive til en ordre.
+
+    Ikke en ordre endnu. Ordrekontoret ser den, retter det, Navision ikke ved —
+    partiet frem for alt — og gemmer. Et udkast, der blev til en ordre uden at
+    nogen så det, ville lægge Navisions huller ind i vores database uden at
+    nogen opdagede dem.
+    """
+
+    order_no: str
+    item_no: str | None = None
+    variety: str | None = None
+    line: str | None = Field(
+        default=None,
+        description=(
+            "Udledt af Routing No. gennem content/lines.yaml. Tom, hvis "
+            "routingen ikke er koblet til et anlæg — så skal den vælges."
+        ),
+    )
+    lot_no: str | None = Field(
+        default=None,
+        description=(
+            "Partiet. Står ikke på Navisions produktionsordre-hoved, så det "
+            "er som regel tomt og skal udfyldes."
+        ),
+    )
+    planned_kg: float | None = None
+    planned_start: datetime | None = None
+    planned_end: datetime | None = None
+    due_date: datetime | None = None
+    source_status: str | None = None
+    source_routing: str | None = None
+    source_variant: str | None = None
+    source_location: str | None = None
+    source_weight_type: str | None = None
+    source_modified_at: datetime | None = None
+    created_by: str | None = None
+    description: str | None = Field(
+        default=None,
+        description="Navisions Description, uændret. Kan bære varekode og lot.",
+    )
+    warnings: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Det, der ikke kunne udledes, sagt højt. En ordre, der lander med "
+            "et tomt felt uden en forklaring, bliver gemt med hullet i."
+        ),
+    )
 
 
 class NewOrder(BaseModel):
@@ -522,6 +613,16 @@ class NewOrder(BaseModel):
     planned_start: datetime | None = None
     note: str | None = Field(default=None, max_length=500)
     created_by: str | None = Field(default=None, max_length=80)
+
+    # Fra Navision. Sendes med, når ordren er hentet frem for tastet.
+    source_status: str | None = Field(default=None, max_length=40)
+    source_routing: str | None = Field(default=None, max_length=40)
+    source_variant: str | None = Field(default=None, max_length=40)
+    source_location: str | None = Field(default=None, max_length=40)
+    source_weight_type: str | None = Field(default=None, max_length=40)
+    planned_end: datetime | None = None
+    due_date: datetime | None = None
+    source_modified_at: datetime | None = None
 
 
 class LotSummary(BaseModel):
