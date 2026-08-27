@@ -1,14 +1,16 @@
 ﻿/**
  * Ét led i proceskæden.
  *
- * De to første processer er "juster og prøv igen": operatøren får et dårligt
- * resultat, skruer på noget, og tager en ny prøve. Kortet er bygget om det.
+ * Operatørens trin er "juster og prøv igen": hun får et dårligt resultat,
+ * skruer på noget, og tager en ny prøve. Kortet er bygget om det.
  * Justeringsteksten står derfor lige under det tal, den frembragte, og ikke i
  * en note et andet sted, for det er sammenhængen mellem de to, der er
- * arbejdet.
+ * arbejdet. Finalizing er hendes sidste.
  *
- * Post Cleaning er ikke det. Den er et kvalitetsstempel, og der er ikke noget
- * at skrue på. Samme data, anden indramning, se StampArea nederst.
+ * Post Cleaning er ikke det. Den er rent analytisk — laboratoriets dom over
+ * færdigvaren — og der står ingen ved linjen, som kan gøre noget ved tallet.
+ * Kortet siger det, frem for at invitere til en justering, der ikke findes.
+ * Samme data, anden indramning, se StampArea nederst.
  */
 
 import type {
@@ -156,6 +158,8 @@ export function ProcessCard({
     <article
       className={`process${alerting ? " process--alert" : ""}${
         process.stamp ? " process--stamp" : ""
+      }${
+        process.owner === "analyst" ? " process--lab" : ""
       }${active ? " process--active" : ""}`}
     >
       {/* Hele kortet er knappen, ikke kun hovedet. Skærmen hænger på en stor
@@ -176,6 +180,12 @@ export function ProcessCard({
           {process.label}
           {alerting && <span className="dot" aria-label="Nyt resultat" />}
         </span>
+        {/* Hvem trinnet hører til. Kun sagt, hvor det ikke er operatøren:
+            de tre første er hendes, og at skrive det på dem alle ville gøre
+            etiketten til baggrundsstøj i stedet for en oplysning. */}
+        {process.owner === "analyst" && (
+          <span className="process__owner">Laboratoriet</span>
+        )}
       </header>
 
       {/* Øverst står det, operatøren beslutter ud fra: hvad prøven viser, og

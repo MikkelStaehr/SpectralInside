@@ -20,7 +20,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-ProcessId = Literal["pre_cleaning", "cleaning", "post_cleaning"]
+ProcessId = Literal["pre_cleaning", "cleaning", "finalizing", "post_cleaning"]
 TestTypeId = Literal["purity", "cleaning_damage", "ct"]
 StampId = Literal["approved", "rejected"]
 
@@ -99,6 +99,15 @@ class Process(BaseModel):
             "Processen afsluttes med et kvalitetsstempel frem for med endnu en "
             "justering. Kun Post Cleaning. Skærmen bruger det til ikke at "
             "invitere til at prøve igen dér, hvor der ikke er noget at skrue på."
+        ),
+    )
+    owner: Literal["operator", "analyst"] = Field(
+        default="operator",
+        description=(
+            "Hvis trin det er. Operatøren står ved linjen og kan skrue på "
+            "noget; analytikeren sidder i laboratoriet og kan ikke. Skærmen "
+            "bruger det til at holde op med at invitere til en ny justering "
+            "på et trin, hvor der ikke er nogen at gøre det."
         ),
     )
 
@@ -262,12 +271,29 @@ PROCESSES: list[Process] = [
     Process(
         id="cleaning", step=2, label="Cleaning", test_types=["cleaning_damage", "ct"]
     ),
+    # Operatørens sidste trin. Herfra og frem er der ikke mere at skrue på.
+    #
+    # ADVARSEL: testtyperne herunder er et gæt. Finalizing er sat op som
+    # Cleaning, fordi de to er det samme slags trin — operatøren justerer og
+    # tager en ny prøve — og fordi det, der kan gå galt i en afsluttende
+    # bearbejdning, er skader og hvad der er tilbage. Ret listen, hvis der også
+    # tages renhedsprøver dér. Det er én linje.
+    Process(
+        id="finalizing",
+        step=3,
+        label="Finalizing",
+        test_types=["cleaning_damage", "ct"],
+    ),
+    # Rent analytisk. Laboratoriets dom over færdigvaren, ikke et trin på
+    # linjen: der står ingen operatør og kan gøre noget ved tallet. Derfor
+    # owner="analyst", og derfor er det her, stemplet sidder.
     Process(
         id="post_cleaning",
-        step=3,
+        step=4,
         label="Post Cleaning",
         test_types=["purity", "cleaning_damage", "ct"],
         stamp=True,
+        owner="analyst",
     ),
 ]
 

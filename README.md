@@ -608,8 +608,23 @@ rammer rigtigt. Det står også på skærmen, så ingen læser dem som noget and
 ## Operatørskærmen
 
 Produktionslinjen, ikke instrumentet. Et lot kommer ind som en ordre, køres
-gennem tre processer, og undervejs tages der prøver. Analytikeren registrerer
+gennem linjens trin, og undervejs tages der prøver. Analytikeren registrerer
 resultatet under **Lots**, og skærmen på produktionsgangen læser det.
+
+Trinnene er fire, og de har ikke samme ejer:
+
+| Trin | Navn | Ejer |
+| --- | --- | --- |
+| 1 | Pre Cleaning | operatør |
+| 2 | Cleaning | operatør |
+| 3 | Finalizing | operatør |
+| 4 | Post Cleaning | laboratoriet |
+
+**Finalizing er operatørens sidste trin.** Post Cleaning er rent analytisk:
+laboratoriets dom over færdigvaren, og der står ingen ved linjen, som kan gøre
+noget ved tallet. Det er derfor `Process.owner` findes — skærmen holder op med
+at invitere til en justering dér, hvor der ikke er nogen at foretage — og det
+er derfor kvalitetsstemplet sidder på Post Cleaning og ikke på Finalizing.
 
 Hierarkiet er stramt og fire niveauer dybt:
 

@@ -3032,14 +3032,17 @@ p:last-child {
 
 /* Kaeden er ét gitter, og kortene arver dets raekker. Uden det maaler hvert
    kort sig selv, og saa staar overskrift, hovedtal og tabel i trappe hen over
-   de tre trin, fordi Post Cleaning har en fanerraekke mere.
+   trinnene, fordi Post Cleaning har en fanerraekke mere.
 
    De fem baand er: overskrift, hovedtal med kvalitet, faner, tabel, fod.
    Hovedtallet ligger over fanerne, fordi det er det, der traeffes beslutning
    paa. Fanerne er vejen ned i detaljen. */
+/* Spalterne saettes fra komponenten, se OperatorScreen. Antallet af trin er
+   data, og CSS kan ikke taelle. Vaerdien her er en reserve, hvis stilarket
+   nogensinde bliver brugt uden den. */
 .chain {
   display: grid;
-  grid-template-columns: 1fr auto 1fr auto 1fr;
+  grid-template-columns: 1fr auto 1fr auto 1fr auto 1fr;
   grid-template-rows: repeat(5, auto);
   row-gap: 14px;
   column-gap: 0;
@@ -3130,6 +3133,17 @@ p:last-child {
   display: flex;
   gap: 12px;
   align-items: center;
+}
+
+/* Hvem trinnet hoerer til. Staar kun paa laboratoriets, og staar stille:
+   det er en oplysning om, hvem der handler, ikke en advarsel. */
+.process__owner {
+  margin-left: auto;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--text-muted);
 }
 
 .process__name {
@@ -4810,9 +4824,12 @@ p:last-child {
    produktionen er bred, men den samme side aabnes ogsaa paa en PC. */
 @media (max-width: 1080px) {
   /* Én spalte. Kortene maaler sig selv igen, for der er ikke laengere noget
-     at flugte med, og pilene drejer med. */
+     at flugte med, og pilene drejer med.
+
+     !important, fordi spalterne saettes som inline-stil fra komponenten. Uden
+     den ville fire kort blive presset sammen paa en PC-skaerm. */
   .chain {
-    grid-template-columns: 1fr;
+    grid-template-columns: 1fr !important;
     grid-template-rows: none;
   }
 

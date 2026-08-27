@@ -159,9 +159,10 @@ CREATE TABLE IF NOT EXISTS scan_blob_bands (
 
 -- --- Lots og proever -------------------------------------------------------
 --
--- Produktionslinjen, ikke instrumentet. Et lot kommer ind som en ordre, koeres
--- gennem tre processer, og undervejs tages der proever. Analytikeren
--- registrerer resultatet, og operatoerskaermen i produktionen laeser det.
+-- Produktionslinjen, ikke instrumentet. Et lot kommer ind som en ordre og
+-- koeres gennem linjens trin, og undervejs tages der proever. De tre foerste
+-- trin er operatoerens; Post Cleaning er laboratoriets dom over faerdigvaren.
+-- Analytikeren registrerer resultatet, og skaermen i produktionen laeser det.
 --
 -- Hierarkiet er stramt: lot -> proces -> testtype -> proevenummer -> metrikker.
 -- Definitionen af processer, testtyper og metrikker staar i lots.py og
@@ -277,11 +278,13 @@ CREATE TABLE IF NOT EXISTS lot_samples (
     CONSTRAINT lot_samples_scope CHECK (
         (process = 'pre_cleaning'   AND test_type IN ('purity', 'ct'))
         OR (process = 'cleaning'      AND test_type IN ('cleaning_damage', 'ct'))
+        OR (process = 'finalizing'    AND test_type IN ('cleaning_damage', 'ct'))
         OR (process = 'post_cleaning' AND test_type IN ('purity', 'cleaning_damage', 'ct'))
     )
 );
 
--- Constrainten skal opdateres paa databaser, der blev lagt op foer CT fandtes.
+-- Constrainten skal opdateres paa databaser, der blev lagt op foer CT og foer
+-- Finalizing fandtes.
 -- CREATE TABLE IF NOT EXISTS roerer ikke en tabel, der allerede er der, saa
 -- reglen ovenfor gaelder kun nye. Drop foerst, tilfoej saa: parret kan koeres
 -- igen og igen, hvor et bart ADD CONSTRAINT ville fejle anden gang.
@@ -289,6 +292,7 @@ ALTER TABLE lot_samples DROP CONSTRAINT IF EXISTS lot_samples_scope;
 ALTER TABLE lot_samples ADD CONSTRAINT lot_samples_scope CHECK (
     (process = 'pre_cleaning'   AND test_type IN ('purity', 'ct'))
     OR (process = 'cleaning'      AND test_type IN ('cleaning_damage', 'ct'))
+    OR (process = 'finalizing'    AND test_type IN ('cleaning_damage', 'ct'))
     OR (process = 'post_cleaning' AND test_type IN ('purity', 'cleaning_damage', 'ct'))
 );
 

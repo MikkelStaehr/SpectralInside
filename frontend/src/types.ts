@@ -197,7 +197,11 @@ export interface ConfusionMatrix {
 // metrikkernes navne eller hvilken vej der er den gode står her: det kommer
 // fra /api/lots/meta, så det kun findes ét sted.
 
-export type ProcessId = "pre_cleaning" | "cleaning" | "post_cleaning";
+export type ProcessId =
+  | "pre_cleaning"
+  | "cleaning"
+  | "finalizing"
+  | "post_cleaning";
 export type TestTypeId = "purity" | "cleaning_damage" | "ct";
 export type StampId = "approved" | "rejected";
 
@@ -279,6 +283,13 @@ export interface Process {
   label: string;
   test_types: TestTypeId[];
   stamp: boolean;
+  /**
+   * Hvis trin det er. Operatoeren staar ved linjen og kan skrue paa noget;
+   * analytikeren sidder i laboratoriet og kan ikke. Skaermen bruger det til at
+   * holde op med at invitere til en ny justering, hvor der ikke er nogen at
+   * goere det.
+   */
+  owner: "operator" | "analyst";
 }
 
 /**

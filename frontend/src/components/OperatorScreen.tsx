@@ -306,8 +306,18 @@ export function OperatorScreen({ lotNo, onBack, onOpenSample }: Props) {
             {/* Kortene og pilene er søskende i det samme gitter, ikke kort
                 pakket ind i hver sin kasse. Det er det, der gør det muligt at
                 lade kortene arve gitterets rækker, så overskrift, hovedtal og
-                tabel står i vandret linje på tværs af de tre trin. */}
-            <div className="chain">
+                tabel står i vandret linje på tværs af trinnene.
+
+                Spalterne sættes her og ikke i CSS. Antallet af trin er data —
+                det kom fra serveren — og CSS kan ikke tælle: `repeat()` vil
+                have et helt tal og ikke en beregning. Mønsteret er ét spor
+                per kort med en pil imellem. */}
+            <div
+              className="chain"
+              style={{
+                gridTemplateColumns: meta.processes.map(() => "1fr").join(" auto "),
+              }}
+            >
               {meta.processes.map((process, index) => (
                 <Fragment key={process.id}>
                   <ProcessCard
