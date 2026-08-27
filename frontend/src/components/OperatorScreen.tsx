@@ -353,6 +353,7 @@ export function OperatorScreen({ lotNo, onBack, onOpenSample }: Props) {
                   <ProcessCard
                     lot={lot}
                     process={process}
+                    processes={meta.processes}
                     testTypes={testTypes}
                     operations={meta.operations}
                     lastOperatorStep={lastOperatorStep}

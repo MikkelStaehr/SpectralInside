@@ -29,6 +29,7 @@ import {
   formatDelta,
   formatMetric,
   latestIn,
+  previousOnLot,
   samplesIn,
   seriesOf,
   type Thresholds,
@@ -52,6 +53,8 @@ const dateTime = new Intl.DateTimeFormat("da-DK", {
 interface Props {
   lot: LotDetail;
   process: Process;
+  /** Alle trin. Bruges til at sige, hvilket trin en ændring er målt imod. */
+  processes: Process[];
   testTypes: Record<string, TestType>;
   /** Standardprocedurerne. Afgør hvornår et lot må stemples. */
   operations: Operation[];
@@ -86,6 +89,7 @@ function unacknowledged(
 export function ProcessCard({
   lot,
   process,
+  processes,
   testTypes,
   operations,
   selected,
@@ -108,8 +112,23 @@ export function ProcessCard({
   const testType = testTypes[selected];
   const scope = samplesIn(lot.samples, process.id, selected);
   const latest = latestIn(lot.samples, process.id, selected);
-  const previous = scope.length > 1 ? scope[scope.length - 2] : undefined;
   const pending = unacknowledged(lot.samples, process.id, selected);
+
+  // Ændringen måles mod den forrige prøve af samme slags **på lottet**, ikke
+  // inden for trinnet.
+  //
+  // Det var forkert før. Et trin har typisk én CT-prøve, og så stod der
+  // "første prøve" på tre af fire kort, selv om monogerm-andelen gik 78,4 ->
+  // 82,1 -> 84,6 -> 86,9 hen over kæden. Pilen skal svare på, om partiet er
+  // blevet bedre, og det spørgsmål stopper ikke ved trinnets kant.
+  //
+  // Kortene står i trinrækkefølge med pile imellem, så "mod den forrige" læses
+  // naturligt som "mod kortet til venstre". Hvilken prøve det præcist er,
+  // står i delta-mærkatets title.
+  const order = processes.map((p) => p.id);
+  const previous = latest
+    ? previousOnLot(lot.samples, latest, order)
+    : undefined;
 
   // De ordnede fordelinger står som stablet søjle under hovedtallet, ikke som
   // rækker. Uden den opdeling blandede kortet FV1, FV2 og FV3 ind mellem
@@ -152,15 +171,24 @@ export function ProcessCard({
   const keyOf = (id: TestTypeId | undefined) => {
     const type = id ? testTypes[id] : undefined;
     const metric = type?.metrics.find((m) => m.primary);
-    const seen = id ? samplesIn(lot.samples, process.id, id) : [];
-    const sample = seen[seen.length - 1];
+    const sample = id ? latestIn(lot.samples, process.id, id) : null;
     if (!type || !metric || !sample) return null;
     return {
       type,
       metric,
       sample,
-      previous: seen.length > 1 ? seen[seen.length - 2] : undefined,
+      previous: previousOnLot(lot.samples, sample, order),
     };
+  };
+
+  /** "mod Cleaning · CT #1 · 06.03". Staar som title paa pilen. */
+  const against = (from: LotSample | undefined) => {
+    if (!from) return undefined;
+    const step = processes.find((p) => p.id === from.process);
+    const type = testTypes[from.test_type];
+    return `Målt mod ${step?.label ?? from.process} · ${
+      type?.label ?? from.test_type
+    } #${from.seq} · ${dateTime.format(new Date(from.taken_at))}`;
   };
 
   const keys = [
@@ -233,6 +261,7 @@ export function ProcessCard({
                   </span>
                   <DeltaTag
                     delta={deltaFor(k.metric, k.sample, k.previous, thresholds)}
+                    against={against(k.previous)}
                     silent
                   />
                 </p>
@@ -313,6 +342,7 @@ export function ProcessCard({
                   </span>
                   <DeltaTag
                     delta={deltaFor(metric, latest, previous, thresholds)}
+                    against={against(previous)}
                   />
                   <Sparkline
                     values={seriesOf(scope, metric.id)}
@@ -395,9 +425,17 @@ export function ProcessCard({
 
 function DeltaTag({
   delta,
+  against,
   silent = false,
 }: {
   delta: ReturnType<typeof deltaFor>;
+  /**
+   * Hvad ændringen er målt imod. Kortene står i trinrækkefølge med pile
+   * imellem, så "mod den forrige" læses naturligt som "mod kortet til
+   * venstre" — men står sammenligningen på et andet trin, skal man kunne
+   * få det at vide uden at gætte.
+   */
+  against?: string;
   /**
    * Sig ingenting, når der ikke er noget at sammenligne med. Bruges dér, hvor
    * prøvenummeret allerede står ved siden af: "#1" og "første prøve" er det
@@ -420,7 +458,7 @@ function DeltaTag({
         : "arrow-down";
 
   return (
-    <span className={deltaClass(delta)}>
+    <span className={deltaClass(delta)} title={against}>
       <Icon name={icon} size={14} strokeWidth={2.6} />
       {formatDelta(delta)}
     </span>

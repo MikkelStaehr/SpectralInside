@@ -203,3 +203,50 @@ export function parseDecimal(raw: string): number | null {
   if (clean === "") return null;
   return Number(clean.replace(",", "."));
 }
+
+/**
+ * Alle prøver af én testtype på lottet, i **linjens** rækkefølge.
+ *
+ * På tværs af trinnene og ikke inden for ét. "Er det blevet bedre" er et
+ * spørgsmål om partiet, ikke om trinnet: monogerm-andelen efter Finalizing
+ * skal måles mod den efter Cleaning, ikke mod ingenting.
+ *
+ * Sorteret på trin og derefter løbenummer — ikke på tidspunkt. Det er ikke
+ * en detalje. En laboratorieprøve kan blive registreret dagen efter, og med
+ * uret som rækkefølge ville Finalizing pludselig blive målt mod en Post
+ * Cleaning-prøve, der ligger senere i kæden. Partiet bevæger sig gennem
+ * trinnene i én retning, uanset hvornår nogen når at taste resultatet ind.
+ *
+ * Løbenummeret alene rækker ikke: det tælles inden for (lot, proces,
+ * testtype), så CT #1 findes på hvert trin.
+ */
+export function seriesOnLot(
+  samples: LotSample[],
+  testType: TestTypeId,
+  order: ProcessId[],
+): LotSample[] {
+  const rank = new Map(order.map((id, index) => [id, index]));
+  // Et ukendt trin ryger bagerst frem for at forsvinde. Er der et trin i data,
+  // som ikke længere står i processerne, skal prøven stadig kunne ses.
+  const at = (id: ProcessId) => rank.get(id) ?? order.length;
+
+  return samples
+    .filter((s) => s.test_type === testType)
+    .sort((a, b) => at(a.process) - at(b.process) || a.seq - b.seq);
+}
+
+/**
+ * Prøven lige før denne i linjens rækkefølge, af den samme testtype.
+ *
+ * Den, en ændring måles imod. Findes den ikke, er prøven den første af sin
+ * slags på lottet, og så er der ingenting at sammenligne med.
+ */
+export function previousOnLot(
+  samples: LotSample[],
+  sample: LotSample,
+  order: ProcessId[],
+): LotSample | undefined {
+  const series = seriesOnLot(samples, sample.test_type, order);
+  const index = series.findIndex((s) => s.id === sample.id);
+  return index > 0 ? series[index - 1] : undefined;
+}
