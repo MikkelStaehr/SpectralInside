@@ -248,10 +248,11 @@ export function ProcessCard({
 
   return (
     <article
+      // Laboratoriets kort skiller sig ud paa etiketten i hovedet og ikke paa
+      // fladen. En klasse uden regel er doed markup, og en flade, der sagde det
+      // samme som etiketten, ville sige det to gange.
       className={`process${alerting ? " process--alert" : ""}${
         process.stamp ? " process--stamp" : ""
-      }${
-        process.owner === "analyst" ? " process--lab" : ""
       }${active ? " process--active" : ""}`}
     >
       {/* Hele kortet er knappen, ikke kun hovedet. Skærmen hænger på en stor

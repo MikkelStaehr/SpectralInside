@@ -1071,6 +1071,9 @@ p:last-child {
   border-radius: 50%;
   background: none;
   color: var(--text-muted);
+  /* En <button> arver ikke skrift af sig selv. Uden den her stod krydset i
+     Arial midt i en flade, der ellers er Inter hele vejen. */
+  font: inherit;
   font-size: 15px;
   cursor: pointer;
 }
@@ -2485,7 +2488,8 @@ p:last-child {
 
 /* --- Procedurevisning ----------------------------------------------------- */
 
-.procedure-view.messages-view {
+.procedure-view,
+.messages-view {
   display: flex;
   flex-direction: column;
   gap: 20px;
@@ -2493,7 +2497,8 @@ p:last-child {
   min-width: 0;
 }
 
-.procedure-view__head h1.messages-view h1 {
+.procedure-view__head h1,
+.messages-view h1 {
   font-size: 34px;
   font-weight: 600;
 }
@@ -4188,6 +4193,58 @@ p:last-child {
   font-size: 15px;
 }
 
+/* Testtypen over tabellen. En stille kontakt og ikke en fanerraekke: den
+   vaelger kun, hvilken tabel der staar nedenunder, mens fanerne oeverst skifter
+   hele proevestroemmen. To lige tunge kontakter ville laere ingen, hvad der er
+   hvad. */
+.process__which {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  margin: 0 0 6px;
+}
+
+/* Er der kun én testtype, er der ikke noget at vaelge imellem, og saa staar
+   den som en etiket i samme baand. */
+.process__which--one {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.which {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 0 3px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  background: none;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.which:hover {
+  color: var(--text);
+}
+
+/* Den valgte baerer stregen. Samme greb som fanerne oeverst, men i det mindre
+   format: det er den samme slags valg paa et lettere niveau. */
+.which--active {
+  color: var(--text);
+  border-bottom-color: var(--link);
+}
+
+.which .dot {
+  color: var(--danger-fg);
+}
+
 /* Proeve, hovedtal og kvalitet i ét baand. De tre laeses som én saetning: hvad
    der blev maalt, hvad det viste, og hvor gode froeene er. */
 .process__lead {
@@ -4870,7 +4927,12 @@ p:last-child {
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  padding: 6px 12px;
+  /* Samme lodrette polstring som .btn. Maerket er en knap og staar i baandet
+     med de to andre — 38 px ved siden af 44 px laeses som en fejl. */
+  padding: 9px 14px;
+  /* En <button> arver ikke skrift af sig selv. Uden den her stod maerket i
+     Arial ved siden af Inter-knapperne i det samme baand. */
+  font: inherit;
   font-size: 15px;
   border: 1px solid var(--border-strong);
   border-radius: 0;
