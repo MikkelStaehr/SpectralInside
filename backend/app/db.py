@@ -188,13 +188,25 @@ CREATE TABLE IF NOT EXISTS orders (
     note       TEXT,
     created_at TIMESTAMPTZ NOT NULL,
     created_by TEXT,
+    -- Naar ordren er planlagt til at koere. Det er den, koeen sorteres efter.
+    -- Uden den ville koeen staa i den raekkefoelge, kontoret tilfaeldigvis
+    -- trykkede paa knappen, og det er ikke en plan.
+    planned_start TIMESTAMPTZ,
     -- Trukket tilbage af kontoret. Slettes ikke: en ordre, der har koert, skal
     -- kunne slaas op bagefter.
     cancelled_at TIMESTAMPTZ
 );
 
-CREATE INDEX IF NOT EXISTS idx_orders_open
-    ON orders (created_at DESC) WHERE cancelled_at IS NULL;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS planned_start TIMESTAMPTZ;
+
+-- Koeen laeses forfra, ikke bagfra: den aeldste ordre er den naeste, der skal
+-- koere. Derfor stigende og ikke faldende. Den gamle sortering paa created_at
+-- alene er afloest.
+DROP INDEX IF EXISTS idx_orders_open;
+
+CREATE INDEX IF NOT EXISTS idx_orders_queue
+    ON orders (line, (COALESCE(planned_start, created_at)))
+    WHERE cancelled_at IS NULL;
 
 CREATE TABLE IF NOT EXISTS lots (
     lot_no     TEXT PRIMARY KEY,
@@ -897,6 +909,11 @@ def list_orders(open_only: bool = True, limit: int = 100) -> list[Row]:
     en kolonne, fordi en kørsel kan slettes eller aldrig blive til noget, og en
     status, der skal vedligeholdes to steder, kommer før eller siden til at
     lyve. Her udledes den af, om der findes en kørsel på ordren.
+
+    Sorteret **stigende**: køen læses forfra, og den ældste ordre er den næste,
+    der skal køre. Rækkefølgen er den planlagte, og falder kontoret tilbage på
+    ingen plan, er det den rækkefølge, ordrerne blev lagt ind i. Ikke den
+    rækkefølge, nogen tilfældigvis trykkede på knappen i sidst.
     """
     where = "WHERE o.cancelled_at IS NULL" if open_only else ""
     if open_only:
@@ -908,7 +925,7 @@ def list_orders(open_only: bool = True, limit: int = 100) -> list[Row]:
             FROM orders o
             LEFT JOIN lots l ON l.order_no = o.order_no
             {where}
-            ORDER BY o.created_at DESC
+            ORDER BY COALESCE(o.planned_start, o.created_at) ASC
             LIMIT %s
             """,
             (limit,),
@@ -937,6 +954,7 @@ def add_order(
     variety: str | None,
     line: str | None,
     planned_kg: float | None,
+    planned_start: datetime | None,
     note: str | None,
     created_by: str | None,
 ) -> Row:
@@ -944,9 +962,9 @@ def add_order(
         lambda conn: conn.execute(
             """
             INSERT INTO orders
-                (order_no, lot_no, item_no, variety, line, planned_kg, note,
-                 created_at, created_by)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                (order_no, lot_no, item_no, variety, line, planned_kg,
+                 planned_start, note, created_at, created_by)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING *
             """,
             (
@@ -956,6 +974,7 @@ def add_order(
                 (variety or "").strip() or None,
                 (line or "").strip() or None,
                 planned_kg,
+                planned_start,
                 (note or "").strip() or None,
                 now(),
                 (created_by or "").strip() or None,

@@ -144,6 +144,7 @@ export function LotsView({ operator, onOpenMonitor }: Props) {
         <button
           type="button"
           className="btn btn--ghost"
+          disabled={!meta}
           onClick={() => setShowNew(true)}
         >
           <Icon name="plus" size={16} strokeWidth={2.2} />
@@ -162,9 +163,10 @@ export function LotsView({ operator, onOpenMonitor }: Props) {
         )}
       </div>
 
-      {showNew && (
+      {showNew && meta && (
         <OrderSheet
           createdBy={operator}
+          lines={meta.lines}
           onClose={() => setShowNew(false)}
           onSaved={orderCreated}
         />

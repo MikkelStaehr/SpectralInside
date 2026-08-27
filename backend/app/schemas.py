@@ -298,6 +298,13 @@ class ClassifierVersion(BaseModel):
 class LotMeta(BaseModel):
     processes: list[Process] = []
     test_types: list[TestType] = []
+    lines: list[Line] = Field(
+        default_factory=list,
+        description=(
+            "Anlæggene, i den rækkefølge de står på forsiden. Fra "
+            "content/lines.yaml."
+        ),
+    )
     lot_fields: list[LotField] = Field(
         default_factory=list,
         description=(
@@ -351,6 +358,20 @@ class LotSample(BaseModel):
     metrics: dict[str, float] = {}
 
 
+class Line(BaseModel):
+    """Ét anlæg.
+
+    Forsiden i produktionen har ét spor per anlæg. Listen kommer fra
+    content/lines.yaml, så anlæggene er en erklæret liste og ikke fritekst:
+    var de fritekst, kunne det samme anlæg staves "Linje 2", "linje 2" og "L2",
+    og så stod der tre spor på skærmen for det samme anlæg.
+    """
+
+    id: str
+    label: str
+    lead: str | None = None
+
+
 class Order(BaseModel):
     """En ordre fra ordrekontoret.
 
@@ -369,6 +390,14 @@ class Order(BaseModel):
         description=(
             "Kontorets tal. Det, der faktisk blev vejet ind, står på kørslen, "
             "og de to er ikke det samme."
+        ),
+    )
+    planned_start: datetime | None = Field(
+        default=None,
+        description=(
+            "Hvornår ordren er planlagt til at køre. Køen sorteres efter den. "
+            "Uden den falder rækkefølgen tilbage på, hvornår ordren blev lagt "
+            "ind, og det er stadig en rækkefølge, bare ikke en plan."
         ),
     )
     note: str | None = None
@@ -396,8 +425,17 @@ class NewOrder(BaseModel):
     lot_no: str = Field(min_length=1, max_length=60)
     item_no: str | None = Field(default=None, max_length=60)
     variety: str | None = Field(default=None, max_length=120)
-    line: str | None = Field(default=None, max_length=60)
+    line: str | None = Field(
+        default=None,
+        max_length=60,
+        description=(
+            "Anlægget, ordren skal køre på. Skal være et id fra "
+            "content/lines.yaml, ellers havner ordren uden for sporene på "
+            "forsiden."
+        ),
+    )
     planned_kg: float | None = Field(default=None, ge=0)
+    planned_start: datetime | None = None
     note: str | None = Field(default=None, max_length=500)
     created_by: str | None = Field(default=None, max_length=80)
 

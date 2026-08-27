@@ -1,103 +1,15 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
-import type { DisplayDetail, LotSummary } from "../types";
+import type { DisplayDetail } from "../types";
 import { Icon } from "./Icon";
 import { formatDate } from "../format";
 
 /**
- * Skærmen i produktionen.
+ * Billedrækken bag én scanning, som den ses på skærmen i produktionen.
  *
- * Ingen indlogning: at skulle taste initialer for at læse et tal er friktion
- * uden formål, og initialerne beskytter alligevel ingenting.
- *
- * Forsiden er listen over lots. Herfra går man ind i ét lot ad gangen, og
- * derinde kan man skifte lot uden at komme tilbage hertil. Begge veje findes,
- * fordi de bruges til hver sit: listen når man kommer til skærmen, strippen
- * når man allerede står ved den.
+ * Forsiden ligger i Board.tsx. Den her fil er enden af vejen: et lot, en
+ * prøve, og til sidst de frø, modellen fandt.
  */
-
-const startedOn = new Intl.DateTimeFormat("da-DK", {
-  day: "numeric",
-  month: "short",
-  hour: "2-digit",
-  minute: "2-digit",
-});
-
-interface ListProps {
-  lots: LotSummary[];
-  onOpen: (lotNo: string) => void;
-  /** Videre til ordrevalget. Et nyt lot begynder med en ordre. */
-  onStart: () => void;
-}
-
-export function DisplayList({ lots, onOpen, onStart }: ListProps) {
-  return (
-    <div className="display">
-      <header className="display__head">
-        <img className="logo logo--light" src="/ubs-logo.png" alt="UBS" />
-        <img
-          className="logo logo--dark"
-          src="/ubs-logo-white.png"
-          alt=""
-          aria-hidden="true"
-        />
-        <h1>Lots</h1>
-        <p>Vælg det lot, du kører.</p>
-      </header>
-
-      {/* Knappen står over listen og ikke under. Et nyt parti begynder, før
-          man har kigget listen igennem, og en knap under fem rækker er en
-          knap, man skal lede efter. */}
-      <button type="button" className="display__start" onClick={onStart}>
-        <Icon name="plus" size={24} strokeWidth={2.2} />
-        Start et lot
-      </button>
-
-      {lots.length === 0 ? (
-        <p className="empty">Der er ikke startet noget lot endnu.</p>
-      ) : (
-        <ul className="display__samples">
-          {lots.map((lot) => (
-            <li key={lot.lot_no}>
-              <button
-                type="button"
-                className={lot.unacknowledged_count > 0 ? "is-alerting" : undefined}
-                onClick={() => onOpen(lot.lot_no)}
-              >
-                <span className="display__sample-name">
-                  {/* Markeringen står også her. Et resultat, ingen har
-                      kvitteret for, skal kunne ses uden at gå ind i lottet. */}
-                  {lot.unacknowledged_count > 0 && (
-                    <span className="dot" aria-label="Nyt resultat" />
-                  )}
-                  {lot.lot_no}
-                </span>
-                <span className="display__sample-meta">
-                  {lot.variety ? `${lot.variety} · ` : ""}
-                  {lot.item_no ? `${lot.item_no} · ` : ""}
-                  {/* Hvornår der sidst skete noget, ikke hvornår lottet blev
-                      startet. Listen er sorteret efter det, og så skal den
-                      også vise det, ellers ser rækkefølgen tilfældig ud. */}
-                  senest{" "}
-                  {startedOn.format(
-                    new Date(lot.last_activity ?? lot.started_at),
-                  )}
-                  {lot.stamp === "approved" && " · godkendt"}
-                  {lot.stamp === "rejected" && " · afvist"}
-                </span>
-                <span className="display__sample-count">
-                  {lot.sample_count}
-                  <span>prøver</span>
-                </span>
-                <Icon name="chevron-right" size={26} />
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
-  );
-}
 
 interface DetailProps {
   scanId: string;

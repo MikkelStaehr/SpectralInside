@@ -317,6 +317,8 @@ export interface Order {
   line: string | null;
   /** Kontorets tal. Det, der faktisk blev vejet ind, staar paa koerslen. */
   planned_kg: number | null;
+  /** Hvornaar ordren er planlagt til at koere. Koeen sorteres efter den. */
+  planned_start: string | null;
   note: string | null;
   created_at: string;
   created_by: string | null;
@@ -326,9 +328,23 @@ export interface Order {
   started_at: string | null;
 }
 
+/**
+ * Ét anlaeg. Forsiden har ét spor per anlaeg.
+ *
+ * Listen kommer fra content/lines.yaml, saa anlaeggene er erklaeret og ikke
+ * fritekst: var de fritekst, kunne det samme anlaeg staves "Linje 2",
+ * "linje 2" og "L2", og saa stod der tre spor for det samme anlaeg.
+ */
+export interface Line {
+  id: string;
+  label: string;
+  lead: string | null;
+}
+
 export interface LotMeta {
   processes: Process[];
   test_types: TestType[];
+  lines: Line[];
   lot_fields: LotField[];
   flat_threshold: number;
   relative_threshold: number;

@@ -1,0 +1,32 @@
+# Anlæggene på fabrikken.
+#
+# Forsiden i produktionen har ét spor per anlæg: hvad der kører nu, og hvilke
+# ordrer der ligger i kø bagefter. Ordrekontoret bestemmer, hvilket anlæg en
+# ordre skal køres på, og `id` herunder er det, ordren peger på.
+#
+# Derfor er anlæggene en erklæret liste og ikke fritekst. Var de fritekst,
+# kunne det samme anlæg staves "Linje 2", "linje 2" og "L2", og så ville der
+# stå tre spor på skærmen for det samme anlæg. Det er den samme fejl, som et
+# tastet ordrenummer.
+#
+# Rækkefølgen her er rækkefølgen på skærmen.
+#
+# ADVARSEL: navnene herunder er gættet. `id` er "1" og "2", fordi det er det,
+# de eksisterende lots står med i databasen, og `label` er skrevet derefter.
+# Ret `label` til det, anlæggene faktisk hedder ude på fabrikken — det er ét
+# sted, og der skal ikke migreres noget. Lad `id` være i fred, medmindre I
+# også vil rette de lots, der allerede peger på dem.
+#
+# Felter:
+#   id     kort og stabilt. Står i databasen på lot og ordre.
+#   label  det operatøren læser
+#   lead   valgfri linje under navnet, fx hvad anlægget kører
+
+lines:
+  - id: "1"
+    label: Linje 1
+    lead: Renselinje
+
+  - id: "2"
+    label: Linje 2
+    lead: Renselinje

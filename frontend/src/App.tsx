@@ -9,6 +9,7 @@ import type {
   LotMeta,
   LotSummary,
   MaintenanceStatus,
+  Order,
   Message,
   Operator,
   Procedure,
@@ -22,8 +23,9 @@ import { ProcedureView } from "./components/ProcedureView";
 import { MessagesView } from "./components/MessagesView";
 import { OperatorBadge } from "./components/OperatorBadge";
 import { StartupWizard } from "./components/StartupWizard";
-import { DisplayList, DisplaySampleView } from "./components/DisplayView";
-import { StartRun } from "./components/StartRun";
+import { DisplaySampleView } from "./components/DisplayView";
+import { Board } from "./components/Board";
+import { LotSheet } from "./components/LotSheet";
 import { OperatorScreen } from "./components/OperatorScreen";
 import { SampleView } from "./components/SampleView";
 import { LotsView } from "./components/LotsView";
@@ -140,7 +142,6 @@ export default function App() {
   const [openScan, setOpenScan] = useState<ScanSummary | null>(null);
   const [classifiers, setClassifiers] = useState<ClassifierVersion[]>([]);
   const [confusion, setConfusion] = useState<ConfusionMatrix | null>(null);
-  const [displayLots, setDisplayLots] = useState<LotSummary[] | null>(null);
 
   const [wizard, setWizard] = useState<Procedure | null>(null);
   const [wizardBusy, setWizardBusy] = useState(false);
@@ -161,25 +162,6 @@ export default function App() {
       .catch(() => setOperators([]));
   }, []);
 
-  // Operatørvisningen ligger foran login og henter uafhængigt af resten.
-  //
-  // Listen hentes forfra med jævne mellemrum. Den er landingssiden på en skærm,
-  // der står tændt hele dagen, og et nyt resultat, der lander mens nogen kigger
-  // på listen, skal kunne ses uden at nogen genindlæser siden. Selve monitoren
-  // har sin egen strøm, se lotStream.ts.
-  useEffect(() => {
-    if (parseHash(hash).name !== "display") return;
-
-    const load = () =>
-      void api
-        .lots()
-        .then(setDisplayLots)
-        .catch(() => setDisplayLots([]));
-
-    load();
-    const timer = window.setInterval(load, 15_000);
-    return () => window.clearInterval(timer);
-  }, [hash]);
 
   const loadShared = useCallback(async () => {
     const [proceduresData, dailyData, healthData] = await Promise.all([
@@ -349,22 +331,12 @@ export default function App() {
   const navClass = (active: boolean) =>
     `nav__item${active ? " nav__item--active" : ""}`;
 
-  if (view.name === "display") {
+  // Forsiden i produktionen. Ordrekøen er forsiden, så der er ikke længere en
+  // vej udenom til et ordrevalg: #/visning/start fører hertil.
+  if (view.name === "display" || view.name === "startRun") {
     return (
-      <DisplayList
-        lots={displayLots ?? []}
+      <BoardRoute
         onOpen={(lotNo) => navigate({ name: "lotMonitor", lotNo })}
-        onStart={() => navigate({ name: "startRun" })}
-      />
-    );
-  }
-
-  // Ordrevalget henter selv sine felter. Skærmen i produktionen er ikke logget
-  // ind og deler ikke det fælles kald, de andre visninger bruger.
-  if (view.name === "startRun") {
-    return (
-      <StartRunRoute
-        onBack={() => navigate({ name: "display" })}
         onStarted={(lot) => navigate({ name: "lotMonitor", lotNo: lot.lot_no })}
       />
     );
@@ -636,32 +608,77 @@ export default function App() {
 }
 
 /**
- * Ordrevalget som selvstændig rute.
+ * Forsiden i produktionen som selvstændig rute.
  *
- * Henter selv feltdefinitionerne. Skærmen i produktionen er ikke logget ind og
- * er derfor ikke med i det fælles kald, de andre visninger deler.
+ * Henter selv. Skærmen ligger foran login og er derfor ikke med i det fælles
+ * kald, de andre visninger deler.
+ *
+ * Lots og ordrer hentes forfra med jævne mellemrum. Det er landingssiden på en
+ * skærm, der står tændt hele dagen: et nyt resultat eller en ny ordre fra
+ * kontoret skal kunne ses, uden at nogen genindlæser siden. Selve
+ * operatørskærmen har sin egen strøm, se lotStream.ts.
  */
-function StartRunRoute({
-  onBack,
+function BoardRoute({
+  onOpen,
   onStarted,
 }: {
-  onBack: () => void;
+  onOpen: (lotNo: string) => void;
   onStarted: (lot: LotSummary) => void;
 }) {
   const [meta, setMeta] = useState<LotMeta | null>(null);
+  const [lots, setLots] = useState<LotSummary[] | null>(null);
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [starting, setStarting] = useState<Order | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     void api.lotMeta().then((m) => {
       if (!cancelled) setMeta(m);
     });
+
+    const load = () => {
+      void api
+        .lots()
+        .then((rows) => !cancelled && setLots(rows))
+        .catch(() => !cancelled && setLots([]));
+      void api
+        .orders()
+        .then((rows) => !cancelled && setOrders(rows))
+        .catch(() => !cancelled && setOrders([]));
+    };
+
+    load();
+    const timer = window.setInterval(load, 15_000);
     return () => {
       cancelled = true;
+      window.clearInterval(timer);
     };
   }, []);
 
-  if (!meta) return <div className="display"><p className="empty">Henter…</p></div>;
+  if (!meta || lots === null)
+    return (
+      <div className="board">
+        <p className="empty">Henter…</p>
+      </div>
+    );
+
   return (
-    <StartRun fields={meta.lot_fields} onBack={onBack} onStarted={onStarted} />
+    <>
+      <Board
+        lines={meta.lines}
+        lots={lots}
+        orders={orders}
+        onOpen={onOpen}
+        onStart={setStarting}
+      />
+      {starting && (
+        <LotSheet
+          fields={meta.lot_fields}
+          order={starting}
+          onClose={() => setStarting(null)}
+          onSaved={onStarted}
+        />
+      )}
+    </>
   );
 }

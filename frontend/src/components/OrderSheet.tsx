@@ -18,12 +18,17 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
 import { parseDecimal } from "../lots";
-import type { Order } from "../types";
+import type { Line, Order } from "../types";
 import { Icon } from "./Icon";
 
 interface Props {
   /** Initialerne på den, der lægger ordren ind. */
   createdBy: string;
+  /**
+   * Anlæggene. Ordren skal pege på ét af dem, ellers lander den uden for
+   * sporene på forsiden, og en ordre, ingen kan se, er ikke en ordre.
+   */
+  lines: Line[];
   onClose: () => void;
   onSaved: (order: Order) => void;
 }
@@ -43,7 +48,19 @@ const FIELDS = [
   },
   { id: "item_no", label: "Ind item nr." },
   { id: "variety", label: "Varietet" },
-  { id: "line", label: "Linje" },
+  {
+    id: "line",
+    label: "Anlæg",
+    type: "line",
+    required: true,
+    hint: "Afgør hvilket spor ordren står i på produktionsskærmen.",
+  },
+  {
+    id: "planned_start",
+    label: "Planlagt start",
+    type: "datetime",
+    hint: "Køen sorteres efter den. Uden den ligger ordren bagest.",
+  },
   {
     id: "planned_kg",
     label: "Planlagt kg",
@@ -54,7 +71,11 @@ const FIELDS = [
   { id: "note", label: "Bemærkning", wide: true },
 ] as const;
 
-export function OrderSheet({ createdBy, onClose, onSaved }: Props) {
+/** Lokal tid ud af feltet og ISO ind i API'et. Se samme par i LotSheet. */
+const fromLocal = (value: string) =>
+  value ? new Date(value).toISOString() : null;
+
+export function OrderSheet({ createdBy, lines, onClose, onSaved }: Props) {
   const [values, setValues] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -85,13 +106,16 @@ export function OrderSheet({ createdBy, onClose, onSaved }: Props) {
       const body: Record<string, unknown> = { created_by: createdBy };
       for (const f of FIELDS) {
         const raw = (values[f.id] ?? "").trim();
-        if ("type" in f && f.type === "number") {
+        const kind = "type" in f ? f.type : "text";
+        if (kind === "number") {
           const value = parseDecimal(raw);
           if (value !== null && Number.isNaN(value)) {
             setError(`${f.label} skal være et tal. Både komma og punktum går an.`);
             return;
           }
           body[f.id] = value;
+        } else if (kind === "datetime") {
+          body[f.id] = fromLocal(raw);
         } else {
           body[f.id] = raw === "" ? null : raw;
         }
@@ -141,8 +165,9 @@ export function OrderSheet({ createdBy, onClose, onSaved }: Props) {
 
         <div className="sheet__body">
           <p className="sheet__lead">
-            Ordren dukker op på produktionsskærmen under "Start et lot". Den kan
-            trækkes tilbage, så længe ingen har sat den i gang.
+            Ordren lægger sig i kø på det anlæg, du vælger, og operatøren
+            starter den derfra. Den kan trækkes tilbage, så længe ingen har sat
+            den i gang.
           </p>
 
           <div className="stamdata">
@@ -158,16 +183,37 @@ export function OrderSheet({ createdBy, onClose, onSaved }: Props) {
                   {"required" in f && f.required && <em>påkrævet</em>}
                 </span>
                 <span className="stamdata__input">
-                  {/* Tekst og ikke `type="number"`: sidstnaevnte afviser
-                      komma, og her tastes der komma. Se parseDecimal. */}
-                  <input
-                    type="text"
-                    inputMode={
-                      "type" in f && f.type === "number" ? "decimal" : undefined
-                    }
-                    value={values[f.id] ?? ""}
-                    onChange={(event) => set(f.id, event.target.value)}
-                  />
+                  {"type" in f && f.type === "line" ? (
+                    /* Anlægget vælges og tastes ikke. Var det fritekst, kunne
+                       det samme anlæg staves "Linje 2", "linje 2" og "L2", og
+                       så stod der tre spor på skærmen for det samme anlæg. */
+                    <select
+                      value={values[f.id] ?? ""}
+                      onChange={(event) => set(f.id, event.target.value)}
+                    >
+                      <option value="">Vælg anlæg</option>
+                      {lines.map((line) => (
+                        <option key={line.id} value={line.id}>
+                          {line.label}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    /* Tekst og ikke `type="number"`: sidstnaevnte afviser
+                       komma, og her tastes der komma. Se parseDecimal. */
+                    <input
+                      type={
+                        "type" in f && f.type === "datetime"
+                          ? "datetime-local"
+                          : "text"
+                      }
+                      inputMode={
+                        "type" in f && f.type === "number" ? "decimal" : undefined
+                      }
+                      value={values[f.id] ?? ""}
+                      onChange={(event) => set(f.id, event.target.value)}
+                    />
+                  )}
                   {"unit" in f && f.unit && <em>{f.unit}</em>}
                 </span>
                 {"hint" in f && f.hint && (

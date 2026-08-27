@@ -23,6 +23,7 @@ PROCEDURES_DIR = CONTENT_DIR / "procedures"
 MAINTENANCE_FILE = CONTENT_DIR / "maintenance.yaml"
 OPERATORS_FILE = CONTENT_DIR / "operators.yaml"
 MACHINE_SETUP_FILE = CONTENT_DIR / "machine-setup.yaml"
+LINES_FILE = CONTENT_DIR / "lines.yaml"
 
 DB_PATH = _path_from_env("UBS_DB_PATH", BACKEND_DIR / "data" / "ubs.db")
 

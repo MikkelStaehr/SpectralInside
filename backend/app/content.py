@@ -15,6 +15,7 @@ import yaml
 
 from . import config
 from .schemas import (
+    Line,
     MaintenanceTask,
     Operator,
     Procedure,
@@ -187,6 +188,38 @@ def load_operators() -> list[Operator]:
             role = "analytiker"
         operators.append(Operator(initials=initials, name=name, role=role))
     return operators
+
+
+def load_lines() -> list[Line]:
+    """Anlæggene på fabrikken.
+
+    Forsiden har ét spor per anlæg, så listen her afgør, hvad der overhovedet
+    står på skærmen. Er filen der ikke, er listen tom, og forsiden falder
+    tilbage til én samlet liste frem for at vise ingenting.
+
+    Rækkefølgen i filen er rækkefølgen på skærmen.
+    """
+    if not config.LINES_FILE.is_file():
+        return []
+
+    try:
+        raw = yaml.safe_load(config.LINES_FILE.read_text(encoding="utf-8")) or {}
+    except yaml.YAMLError as exc:
+        raise ContentError(f"lines.yaml er ugyldig: {exc}") from exc
+
+    lines: list[Line] = []
+    for entry in raw.get("lines", []) or []:
+        line_id = str(entry.get("id") or "").strip()
+        if not line_id:
+            continue
+        lines.append(
+            Line(
+                id=line_id,
+                label=str(entry.get("label") or line_id).strip(),
+                lead=str(entry.get("lead") or "").strip() or None,
+            )
+        )
+    return lines
 
 
 def load_setup_options() -> list[SetupGroup]:

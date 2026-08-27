@@ -801,6 +801,7 @@ def _to_order(row) -> Order:
         variety=row["variety"],
         line=row["line"],
         planned_kg=row["planned_kg"],
+        planned_start=row["planned_start"],
         note=row["note"],
         created_at=row["created_at"],
         created_by=row["created_by"],
@@ -840,6 +841,19 @@ def create_order(order: NewOrder) -> Order:
             status_code=409,
             detail=f"Lot {order.lot_no} er allerede kørt på en anden ordre",
         )
+
+    # Anlægget skal findes. En ordre på "Linje 3" ville lande uden for
+    # sporene på forsiden, og en ordre, ingen kan se, er ikke en ordre.
+    known = {line.id for line in content.load_lines()}
+    if known and order.line and order.line.strip() not in known:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"Anlægget '{order.line}' findes ikke. Vælg et af: "
+                + ", ".join(sorted(known))
+            ),
+        )
+
     return _to_order(
         db.add_order(
             order.order_no,
@@ -848,6 +862,7 @@ def create_order(order: NewOrder) -> Order:
             order.variety,
             order.line,
             order.planned_kg,
+            order.planned_start,
             order.note,
             order.created_by,
         )
@@ -897,6 +912,7 @@ def lot_meta() -> LotMeta:
     return LotMeta(
         processes=lots.PROCESSES,
         test_types=list(lots.TEST_TYPES.values()),
+        lines=content.load_lines(),
         lot_fields=lots.LOT_FIELDS,
         flat_threshold=lots.FLAT_THRESHOLD,
         relative_threshold=lots.RELATIVE_THRESHOLD,

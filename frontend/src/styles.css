@@ -1531,33 +1531,257 @@ p:last-child {
   color: var(--text-muted);
 }
 
-/* Start et lot. Staar over listen, fordi et nyt parti begynder, foer man har
-   kigget listen igennem.
+/* --- Forsiden i produktionen: ét spor per anlaeg -------------------------- */
+/*
+   Skaermen svarer paa to ting uden at nogen trykker: hvad koerer nu paa hvert
+   anlaeg, og hvad ligger klar bagefter. Koeen *er* forsiden, saa der er ingen
+   knap, der foerer til en liste af ordrer.
+*/
+.board {
+  max-width: 1500px;
+  margin: 0 auto;
+  padding: 40px 28px 80px;
+  display: flex;
+  flex-direction: column;
+  gap: 30px;
+}
 
-   Stiplet og ikke fyldt. Raekkerne nedenunder er ting, der findes, og den her
-   er en aabning, hvor der endnu ikke er noget. Var den fyldt som dem, ville
-   den laese som endnu et lot. Hoejden foelger raekkerne, saa den staar i
-   samme spor og ikke som et fremmedlegeme oeverst. */
-.display__start {
+.board__head {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.board__head .logo {
+  width: 118px;
+  padding-left: 0;
+  margin-bottom: 10px;
+}
+
+.board__head h1 {
+  font-size: 34px;
+}
+
+.board__head p {
+  margin: 0;
+  font-size: 17px;
+  color: var(--text-muted);
+}
+
+/* Sporene ved siden af hinanden. To anlaeg skal kunne ses i ét blik, og
+   under hinanden ville det andet ligge under skaermkanten. */
+.board__tracks {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
+  gap: 24px;
+}
+
+.track {
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  padding: 24px 24px 26px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.track__head {
+  margin-bottom: 6px;
+}
+
+.track__head h2 {
+  margin: 0;
+  font-size: 27px;
+}
+
+.track__head p {
+  margin: 2px 0 0;
+  font-size: 15px;
+  color: var(--text-muted);
+}
+
+/* Baandet over hver af de to lister. Smaat og roligt: det er en etiket paa
+   det nedenunder og ikke en overskrift, der skal laeses. */
+.track__label {
+  margin: 12px 0 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.track__label em {
+  font-style: normal;
+  letter-spacing: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.track__label::after {
+  content: "";
+  flex: 1 1 auto;
+  height: 1px;
+  background: var(--border);
+}
+
+.track__idle {
+  margin: 0;
+  font-size: 15px;
+  color: var(--text-muted);
+}
+
+.track__list,
+.track__queue {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.track__list button,
+.track__queue button {
   display: flex;
   align-items: center;
   gap: 16px;
   width: 100%;
-  padding: 20px 24px;
-  background: none;
-  border: 1px dashed var(--border-strong);
+  padding: 16px 18px;
+  background: var(--surface);
+  border: 1px solid var(--border);
   border-radius: var(--radius);
   font: inherit;
-  font-size: 21px;
-  font-weight: 600;
-  color: var(--text-muted);
+  color: inherit;
   text-align: left;
   cursor: pointer;
 }
 
-.display__start:hover {
-  border-color: var(--link);
+.track__list button:hover,
+.track__queue button:hover {
+  border-color: var(--border-strong);
+}
+
+/* Det, der koerer, er tungere end det, der venter. Kanten til venstre er den
+   eneste forskel, der behoeves: to fyldfarver ville sige det samme igen. */
+.track__active {
+  border-left: 3px solid var(--text) !important;
+}
+
+.track__active--done {
+  border-left-color: var(--border-strong) !important;
+}
+
+.track__name {
+  font-size: 21px;
+  font-weight: 600;
+  flex: none;
+}
+
+.track__meta {
+  font-size: 15px;
+  color: var(--text-muted);
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.track__count {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  font-size: 27px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  flex: none;
+}
+
+.track__count span {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  margin-top: 3px;
+}
+
+/* Koeens nummer og ikke ordrens. Det siger, hvad der koerer som det naeste,
+   og det er det, der spoerges om. */
+.track__pos {
+  flex: none;
+  width: 26px;
+  font-size: 15px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+}
+
+.track__queue li:first-child .track__pos {
+  color: var(--text);
+}
+
+.track__go {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 15px;
+  font-weight: 600;
   color: var(--link);
+}
+
+/* Kun den foerste i koeen faar ordet. De andre kan startes, men de skal ikke
+   se ud som om, de skal. */
+.track__queue li:not(:first-child) .track__go {
+  color: var(--border-strong);
+}
+
+/* Koerte lots ligger sammenfoldet. De skal kunne findes, men de er ikke det,
+   skaermen handler om. */
+.board__done {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.board__done-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  align-self: flex-start;
+  padding: 8px 0;
+  background: none;
+  border: 0;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.board__done-toggle:hover {
+  color: var(--text);
+}
+
+.board__done-toggle em {
+  font-style: normal;
+  letter-spacing: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 900px) {
+  .board__tracks {
+    grid-template-columns: 1fr;
+  }
 }
 
 .display__samples {
@@ -4408,11 +4632,19 @@ p:last-child {
 }
 
 /* Markeringen paa lot-listen, altsaa forsiden til operatoerskaermen. */
-.display__samples button.is-alerting {
+.display__samples button.is-alerting,
+.track__list button.is-alerting {
   border-color: var(--danger-fg);
 }
 
-.display__sample-name .dot {
+/* Kanten til venstre er kortets tyngde og skal ogsaa skifte, ellers staar der
+   en roed ramme med en sort streg i den ene side. */
+.track__active.is-alerting {
+  border-left-color: var(--danger-fg) !important;
+}
+
+.display__sample-name .dot,
+.track__name .dot {
   color: var(--danger-fg);
   margin-right: 10px;
   display: inline-block;
