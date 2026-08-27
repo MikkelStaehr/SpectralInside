@@ -170,6 +170,29 @@ export function OperatorScreen({ lotNo, onBack, onOpenSample }: Props) {
     }
   };
 
+  /**
+   * Meld partiet færdigt på linjen.
+   *
+   * Sætter sluttidspunktet, og det er hele overleveringen: lottet forsvinder
+   * fra renselinjens spor på forsiden og lægger sig i laboratoriets kø. Der er
+   * ingen ny tilstand at vedligeholde — "operatøren er færdig" og "hvornår
+   * blev den færdig" er det samme spørgsmål.
+   */
+  const handover = async () => {
+    if (!lot) return;
+    setBusy(true);
+    try {
+      await api.updateLot(lot.lot_no, { ended_at: new Date().toISOString() });
+      await refresh();
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Kunne ikke melde lottet færdigt",
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const stamp = async (verdict: StampId) => {
     if (!lot) return;
     setBusy(true);
@@ -187,6 +210,13 @@ export function OperatorScreen({ lotNo, onBack, onOpenSample }: Props) {
   const alerting = (lot?.unacknowledged_count ?? 0) > 0;
 
   const scopeProcess = meta?.processes.find((p) => p.id === scope?.process);
+
+  // Det sidste trin, operatøren ejer. Udledt af processerne, så et femte trin
+  // ikke kræver en ændring nogen steder.
+  const lastOperatorStep =
+    [...(meta?.processes ?? [])]
+      .reverse()
+      .find((p) => p.owner === "operator")?.id ?? null;
 
   return (
     <div className="monitor">
@@ -325,6 +355,8 @@ export function OperatorScreen({ lotNo, onBack, onOpenSample }: Props) {
                     process={process}
                     testTypes={testTypes}
                     operations={meta.operations}
+                    lastOperatorStep={lastOperatorStep}
+                    onHandover={handover}
                     selected={tabs[process.id] ?? process.test_types[0]}
                     active={scope?.process === process.id}
                     thresholds={thresholds}

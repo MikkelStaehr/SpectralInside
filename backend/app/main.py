@@ -846,14 +846,16 @@ def create_order(order: NewOrder) -> Order:
             detail=f"Lot {order.lot_no} er allerede kørt på en anden ordre",
         )
 
-    # Anlægget skal findes. En ordre på "Linje 3" ville lande uden for
-    # sporene på forsiden, og en ordre, ingen kan se, er ikke en ordre.
-    known = {line.id for line in content.load_lines()}
+    # Anlægget skal findes, og det skal være en renselinje. En ordre på
+    # "Linje 3" ville lande uden for sporene på forsiden, og en ordre, ingen
+    # kan se, er ikke en ordre. En ordre i laboratoriets kø giver heller ingen
+    # mening: dér ligger lots, operatøren er færdig med, ikke ordrer.
+    known = {l.id for l in content.load_lines() if l.kind == "cleaning"}
     if known and order.line and order.line.strip() not in known:
         raise HTTPException(
             status_code=422,
             detail=(
-                f"Anlægget '{order.line}' findes ikke. Vælg et af: "
+                f"'{order.line}' er ikke en renselinje. Vælg et af: "
                 + ", ".join(sorted(known))
             ),
         )
@@ -896,12 +898,12 @@ def edit_order(order_no: str, update: OrderUpdate) -> Order:
 
     fields = update.model_dump(exclude_unset=True)
 
-    known = {line.id for line in content.load_lines()}
+    known = {l.id for l in content.load_lines() if l.kind == "cleaning"}
     if known and fields.get("line") and fields["line"].strip() not in known:
         raise HTTPException(
             status_code=422,
             detail=(
-                f"Anlægget '{fields['line']}' findes ikke. Vælg et af: "
+                f"'{fields['line']}' er ikke en renselinje. Vælg et af: "
                 + ", ".join(sorted(known))
             ),
         )

@@ -357,6 +357,12 @@ export interface Order {
 export interface Line {
   id: string;
   label: string;
+  /**
+   * Hvad slags koe sporet har. En renselinje har en koe af ordrer, som
+   * operatoeren saetter i gang. Laboratoriet har en koe af lots, som
+   * operatoeren er faerdig med paa linjen, og som venter paa Post Cleaning.
+   */
+  kind: "cleaning" | "analysis";
   lead: string | null;
 }
 

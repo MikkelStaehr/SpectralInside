@@ -17,16 +17,37 @@
 # sted, og der skal ikke migreres noget. Lad `id` være i fred, medmindre I
 # også vil rette de lots, der allerede peger på dem.
 #
+# To slags spor, og de har hver sin kø:
+#
+#   cleaning  en renselinje. Køen er ordrer fra ordrekontoret, og operatøren
+#             sætter den øverste i gang.
+#   analysis  laboratoriet. Køen er lots, som operatøren er færdig med på
+#             linjen, og som venter på Post Cleaning. Der ligger ingen ordrer
+#             i den kø: et lot lander her, fordi det kommer fra en renselinje.
+#
+# Et lot flytter ikke `line`, når det går fra trin 3 til trin 4. Det bliver
+# stående på den renselinje, det blev kørt på — det er en oplysning om, hvor
+# partiet kom fra, og den skal ikke gå tabt. Analysesporet samler i stedet dem,
+# operatøren har meldt færdige, uanset hvilken linje de kom fra.
+#
 # Felter:
 #   id     kort og stabilt. Står i databasen på lot og ordre.
 #   label  det operatøren læser
+#   kind   cleaning eller analysis. Standard er cleaning
 #   lead   valgfri linje under navnet, fx hvad anlægget kører
 
 lines:
   - id: "1"
     label: Linje 1
+    kind: cleaning
     lead: Renselinje
 
   - id: "2"
     label: Linje 2
+    kind: cleaning
     lead: Renselinje
+
+  - id: analyse
+    label: Analyse
+    kind: analysis
+    lead: Laboratoriet

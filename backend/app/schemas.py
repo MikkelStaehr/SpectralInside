@@ -407,16 +407,24 @@ class LotSample(BaseModel):
 
 
 class Line(BaseModel):
-    """Ét anlæg.
+    """Ét spor på forsiden i produktionen.
 
-    Forsiden i produktionen har ét spor per anlæg. Listen kommer fra
-    content/lines.yaml, så anlæggene er en erklæret liste og ikke fritekst:
-    var de fritekst, kunne det samme anlæg staves "Linje 2", "linje 2" og "L2",
-    og så stod der tre spor på skærmen for det samme anlæg.
+    Listen kommer fra content/lines.yaml, så sporene er en erklæret liste og
+    ikke fritekst: var de fritekst, kunne det samme anlæg staves "Linje 2",
+    "linje 2" og "L2", og så stod der tre spor på skærmen for det samme anlæg.
     """
 
     id: str
     label: str
+    kind: Literal["cleaning", "analysis"] = Field(
+        default="cleaning",
+        description=(
+            "Hvad slags kø sporet har. En renselinje har en kø af ordrer, som "
+            "operatøren sætter i gang. Laboratoriet har en kø af lots, som "
+            "operatøren er færdig med på linjen, og som venter på Post "
+            "Cleaning. Der ligger ingen ordrer i den kø."
+        ),
+    )
     lead: str | None = None
 
 

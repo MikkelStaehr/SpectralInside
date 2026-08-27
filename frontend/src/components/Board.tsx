@@ -33,13 +33,19 @@ const clock = new Intl.DateTimeFormat("da-DK", {
 });
 
 /**
- * Om kørslen er forbi.
+ * Hvor lottet er i sit liv. To nullable felter, tre tilstande, ingen status at
+ * vedligeholde.
  *
- * Enten er den stemplet, eller også har nogen sat et sluttidspunkt. De to er
- * hver sin måde at være færdig på: stemplet er kvalitetens ja eller nej,
- * sluttidspunktet er linjens. Et parti kan være kørt uden at være bedømt.
+ * `ended_at` er operatørens "færdig på linjen". Det er ikke det samme som
+ * færdig: partiet er ude af renselinjen, men laboratoriet har ikke sagt sit
+ * endnu. `stamp` er den dom, og først dér er lottet forbi.
  */
-const isDone = (lot: LotSummary) => lot.stamp !== null || lot.ended_at !== null;
+type Stage = "line" | "analysis" | "done";
+
+function stageOf(lot: LotSummary): Stage {
+  if (lot.stamp !== null) return "done";
+  return lot.ended_at !== null ? "analysis" : "line";
+}
 
 interface Props {
   lines: Line[];
@@ -52,8 +58,26 @@ interface Props {
 export function Board({ lines, lots, orders, onOpen, onStart }: Props) {
   const [showDone, setShowDone] = useState(false);
 
-  const running = lots.filter((lot) => !isDone(lot));
-  const done = lots.filter(isDone);
+  const running = lots.filter((lot) => stageOf(lot) === "line");
+  const done = lots.filter((lot) => stageOf(lot) === "done");
+
+  /**
+   * Laboratoriets kø: lots, operatøren har meldt færdige på linjen.
+   *
+   * Ældste først. Køen læses forfra, og det, der har ventet længst, er det
+   * næste, der skal analyseres — den samme regel som ordrekøen.
+   *
+   * Uanset hvilken renselinje de kom fra. Der er ét laboratorium, og et lot
+   * skifter ikke `line`, når det bliver overleveret: linjen er en oplysning om,
+   * hvor partiet kom fra, og den skal ikke gå tabt.
+   */
+  const waiting = useMemo(
+    () =>
+      lots
+        .filter((lot) => stageOf(lot) === "analysis")
+        .sort((a, b) => (a.ended_at ?? "").localeCompare(b.ended_at ?? "")),
+    [lots],
+  );
 
   /**
    * Sporene, i den rækkefølge anlæggene står i lines.yaml.
@@ -67,22 +91,34 @@ export function Board({ lines, lots, orders, onOpen, onStart }: Props) {
     const known = new Set(lines.map((l) => l.id));
     const belongs = (value: string | null, id: string) => value === id;
 
-    const named = lines.map((line) => ({
-      line,
-      running: running.filter((lot) => belongs(lot.line, line.id)),
-      queue: orders.filter((order) => belongs(order.line, line.id)),
-    }));
+    // Laboratoriet har ingen ordrer og ingen linje at høre til. Det samler
+    // dem, operatøren er færdig med, og køen er lots og ikke ordrer.
+    const named = lines.map((line) =>
+      line.kind === "analysis"
+        ? { line, running: [] as LotSummary[], queue: [], waiting }
+        : {
+            line,
+            running: running.filter((lot) => belongs(lot.line, line.id)),
+            queue: orders.filter((order) => belongs(order.line, line.id)),
+            waiting: [] as LotSummary[],
+          },
+    );
 
     const stray = {
-      line: { id: "", label: "Uden anlæg", lead: null } as Line,
+      line: { id: "", label: "Uden anlæg", kind: "cleaning", lead: null } as Line,
       running: running.filter((lot) => !lot.line || !known.has(lot.line)),
       queue: orders.filter((order) => !order.line || !known.has(order.line)),
+      waiting: [] as LotSummary[],
     };
 
     return stray.running.length + stray.queue.length > 0
       ? [...named, stray]
       : named;
-  }, [lines, running, orders]);
+  }, [lines, running, orders, waiting]);
+
+  /** Anlæggets navn. Serveren sender id'er, og "2" er ikke noget at læse. */
+  const lineLabel = (id: string | null) =>
+    lines.find((l) => l.id === id)?.label ?? id ?? "uden anlæg";
 
   return (
     <div className="board">
@@ -112,97 +148,152 @@ export function Board({ lines, lots, orders, onOpen, onStart }: Props) {
                 {track.line.lead && <p>{track.line.lead}</p>}
               </header>
 
-              <p className="track__label">
-                Kører nu
-                {track.running.length > 1 && <em>{track.running.length}</em>}
-              </p>
+              {track.line.kind === "analysis" ? (
+                <>
+                  {/* Laboratoriets kø. Ikke ordrer, men lots, operatøren har
+                      meldt færdige på linjen. De ligger her, til Post Cleaning
+                      er lavet og lottet er stemplet. */}
+                  <p className="track__label">
+                    Afventer analyse
+                    {track.waiting.length > 0 && <em>{track.waiting.length}</em>}
+                  </p>
 
-              {track.running.length === 0 ? (
-                <p className="track__idle">Intet kører på dette anlæg.</p>
+                  {track.waiting.length === 0 ? (
+                    <p className="track__idle">
+                      Ingen lots venter. Et lot lander her, når operatøren melder
+                      det færdigt på linjen.
+                    </p>
+                  ) : (
+                    <ol className="track__queue">
+                      {track.waiting.map((lot, index) => (
+                        <li key={lot.lot_no}>
+                          <button
+                            type="button"
+                            onClick={() => onOpen(lot.lot_no)}
+                          >
+                            <span className="track__pos">{index + 1}</span>
+                            <span className="track__name">
+                              {lot.unacknowledged_count > 0 && (
+                                <span className="dot" aria-label="Nyt resultat" />
+                              )}
+                              {lot.lot_no}
+                            </span>
+                            <span className="track__meta">
+                              {lot.variety ? `${lot.variety} · ` : ""}
+                              {/* Hvor partiet kom fra. Lottet skifter ikke
+                                  linje ved overleveringen, og laboratoriet
+                                  skal kunne se, hvilket anlæg der kørte det. */}
+                              {lineLabel(lot.line)}
+                              {lot.ended_at &&
+                                ` · færdig ${when.format(new Date(lot.ended_at))}`}
+                            </span>
+                            <span className="track__count">
+                              {lot.sample_count}
+                              <span>prøver</span>
+                            </span>
+                            <Icon name="chevron-right" size={24} />
+                          </button>
+                        </li>
+                      ))}
+                    </ol>
+                  )}
+                </>
               ) : (
-                <ul className="track__list">
-                  {track.running.map((lot) => (
-                    <li key={lot.lot_no}>
-                      <button
-                        type="button"
-                        className={`track__active${
-                          lot.unacknowledged_count > 0 ? " is-alerting" : ""
-                        }`}
-                        onClick={() => onOpen(lot.lot_no)}
-                      >
-                        <span className="track__name">
-                          {/* Markeringen står også her. Et resultat, ingen har
-                              kvitteret for, skal kunne ses uden at gå ind. */}
-                          {lot.unacknowledged_count > 0 && (
-                            <span className="dot" aria-label="Nyt resultat" />
-                          )}
-                          {lot.lot_no}
-                        </span>
-                        <span className="track__meta">
-                          {lot.variety ? `${lot.variety} · ` : ""}
-                          {lot.order_no ? `${lot.order_no} · ` : ""}
-                          senest{" "}
-                          {clock.format(
-                            new Date(lot.last_activity ?? lot.started_at),
-                          )}
-                        </span>
-                        <span className="track__count">
-                          {lot.sample_count}
-                          <span>prøver</span>
-                        </span>
-                        <Icon name="chevron-right" size={24} />
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              )}
-
-              <p className="track__label">
-                I kø
-                {track.queue.length > 0 && <em>{track.queue.length}</em>}
-              </p>
-
-              {track.queue.length === 0 ? (
-                <p className="track__idle">
-                  Ingen ordrer i kø. Kommer der en fra ordrekontoret, dukker den
-                  op her af sig selv.
+                <>
+                <p className="track__label">
+                  Kører nu
+                  {track.running.length > 1 && <em>{track.running.length}</em>}
                 </p>
-              ) : (
-                <ol className="track__queue">
-                  {track.queue.map((order, index) => (
-                    <li key={order.order_no}>
-                      <button type="button" onClick={() => onStart(order)}>
-                        {/* Nummeret er køens og ikke ordrens. Det siger, hvad
-                            der kører som det næste, og det er det, der
-                            spørges om. */}
-                        <span className="track__pos">{index + 1}</span>
-                        <span className="track__name">{order.lot_no}</span>
-                        {/* Planlagt kg står i linjen og ikke som stort tal.
-                            Det store tal på kørslerne ovenfor er prøver, der
-                            faktisk er taget; et planlagt tal er kontorets
-                            forventning, og de to må ikke veje ens. */}
-                        <span className="track__meta">
-                          {order.variety ? `${order.variety} · ` : ""}
-                          {order.order_no}
-                          {order.planned_kg !== null &&
-                            ` · ${order.planned_kg.toLocaleString("da-DK")} kg`}
-                          {order.planned_start
-                            ? ` · planlagt ${when.format(new Date(order.planned_start))}`
-                            : ""}
-                        </span>
-                        {/* Kun den første i køen får ordet. De andre kan
-                            startes, men de skal ikke se ud som om, de skal:
-                            "Start nu" på nummer to er en opfordring til at
-                            køre uden om planen. */}
-                        <span className="track__go">
-                          {index === 0 && "Start"}
-                          <Icon name="chevron-right" size={18} />
-                        </span>
-                      </button>
-                    </li>
-                  ))}
-                </ol>
+
+                {track.running.length === 0 ? (
+                  <p className="track__idle">Intet kører på dette anlæg.</p>
+                ) : (
+                  <ul className="track__list">
+                    {track.running.map((lot) => (
+                      <li key={lot.lot_no}>
+                        <button
+                          type="button"
+                          className={`track__active${
+                            lot.unacknowledged_count > 0 ? " is-alerting" : ""
+                          }`}
+                          onClick={() => onOpen(lot.lot_no)}
+                        >
+                          <span className="track__name">
+                            {/* Markeringen står også her. Et resultat, ingen har
+                                kvitteret for, skal kunne ses uden at gå ind. */}
+                            {lot.unacknowledged_count > 0 && (
+                              <span className="dot" aria-label="Nyt resultat" />
+                            )}
+                            {lot.lot_no}
+                          </span>
+                          <span className="track__meta">
+                            {lot.variety ? `${lot.variety} · ` : ""}
+                            {lot.order_no ? `${lot.order_no} · ` : ""}
+                            senest{" "}
+                            {clock.format(
+                              new Date(lot.last_activity ?? lot.started_at),
+                            )}
+                          </span>
+                          <span className="track__count">
+                            {lot.sample_count}
+                            <span>prøver</span>
+                          </span>
+                          <Icon name="chevron-right" size={24} />
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+
+                <p className="track__label">
+                  I kø
+                  {track.queue.length > 0 && <em>{track.queue.length}</em>}
+                </p>
+
+                {track.queue.length === 0 ? (
+                  <p className="track__idle">
+                    Ingen ordrer i kø. Kommer der en fra ordrekontoret, dukker den
+                    op her af sig selv.
+                  </p>
+                ) : (
+                  <ol className="track__queue">
+                    {track.queue.map((order, index) => (
+                      <li key={order.order_no}>
+                        <button type="button" onClick={() => onStart(order)}>
+                          {/* Nummeret er køens og ikke ordrens. Det siger, hvad
+                              der kører som det næste, og det er det, der
+                              spørges om. */}
+                          <span className="track__pos">{index + 1}</span>
+                          <span className="track__name">{order.lot_no}</span>
+                          {/* Planlagt kg står i linjen og ikke som stort tal.
+                              Det store tal på kørslerne ovenfor er prøver, der
+                              faktisk er taget; et planlagt tal er kontorets
+                              forventning, og de to må ikke veje ens. */}
+                          <span className="track__meta">
+                            {order.variety ? `${order.variety} · ` : ""}
+                            {order.order_no}
+                            {order.planned_kg !== null &&
+                              ` · ${order.planned_kg.toLocaleString("da-DK")} kg`}
+                            {order.planned_start
+                              ? ` · planlagt ${when.format(new Date(order.planned_start))}`
+                              : ""}
+                          </span>
+                          {/* Kun den første i køen får ordet. De andre kan
+                              startes, men de skal ikke se ud som om, de skal:
+                              "Start nu" på nummer to er en opfordring til at
+                              køre uden om planen. */}
+                          <span className="track__go">
+                            {index === 0 && "Start"}
+                            <Icon name="chevron-right" size={18} />
+                          </span>
+                        </button>
+                      </li>
+                    ))}
+                  </ol>
+                )}
+                </>
               )}
+
             </section>
           ))}
         </div>

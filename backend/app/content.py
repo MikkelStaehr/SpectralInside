@@ -213,10 +213,14 @@ def load_lines() -> list[Line]:
         line_id = str(entry.get("id") or "").strip()
         if not line_id:
             continue
+        kind = str(entry.get("kind") or "cleaning").strip().lower()
+        if kind not in ("cleaning", "analysis"):
+            kind = "cleaning"
         lines.append(
             Line(
                 id=line_id,
                 label=str(entry.get("label") or line_id).strip(),
+                kind=kind,
                 lead=str(entry.get("lead") or "").strip() or None,
             )
         )

@@ -1635,6 +1635,13 @@ p:last-child {
   color: var(--text-muted);
 }
 
+/* Laboratoriets spor har en anden slags koe: lots og ikke ordrer. Kanten til
+   venstre siger, at raekken er noget, der koerer, og ikke noget, der venter
+   paa at blive sat i gang. */
+.track__queue .track__name .dot {
+  margin-right: 8px;
+}
+
 .track__list,
 .track__queue {
   list-style: none;
@@ -4385,6 +4392,27 @@ p:last-child {
    hoejre. Opsaetningsarket skubber dem med sin taeller og roeres ikke. */
 .sheet__foot--end {
   justify-content: flex-end;
+}
+
+/* Overleveringen: operatoerens sidste handling paa lottet. Staar i foden paa
+   det sidste trin, hun ejer. */
+.process__handover {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.process__handover-done {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 15px;
+  color: var(--text-muted);
+}
+
+.process__handover-done svg {
+  flex: none;
+  color: var(--ok-fg);
 }
 
 /* Checklisten under stemplet: hvilke standardprocedurer der foreligger.

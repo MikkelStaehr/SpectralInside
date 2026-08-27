@@ -363,7 +363,15 @@ LOT_FIELDS: list[LotField] = [
     LotField(id="started_by", label="Initialer"),
     LotField(id="started_at", label="Start", type="datetime", readonly=True,
              source="system"),
-    LotField(id="ended_at", label="Slut", type="datetime"),
+    LotField(
+        id="ended_at",
+        label="Færdig på linjen",
+        type="datetime",
+        hint=(
+            "Sættes af knappen på det sidste trin. Herfra ligger lottet i "
+            "laboratoriets kø. Kan rettes her, hvis tidspunktet blev forkert."
+        ),
+    ),
     LotField(id="note", label="Bemærkning"),
 ]
 

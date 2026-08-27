@@ -18,6 +18,7 @@ import type {
   LotSample,
   Operation,
   Process,
+  ProcessId,
   StampId,
   TestType,
   TestTypeId,
@@ -61,6 +62,13 @@ interface Props {
   onSelect: (testType: TestTypeId) => void;
   onAcknowledge: (sampleIds: number[]) => void;
   onStamp: (stamp: StampId) => void;
+  /** Meld partiet færdigt på linjen. Flytter det over i laboratoriets kø. */
+  onHandover: () => void;
+  /**
+   * Det sidste trin, operatøren ejer. Udledt af processerne og sendt ind, så
+   * kortet ikke skal kende rækkefølgen for at vide, om det er det sidste.
+   */
+  lastOperatorStep: ProcessId | null;
   busy: boolean;
 }
 
@@ -86,6 +94,8 @@ export function ProcessCard({
   onSelect,
   onAcknowledge,
   onStamp,
+  onHandover,
+  lastOperatorStep,
   busy,
 }: Props) {
   // Kortet alarmerer, hvis noget som helst under det er ukvitteret, også når
@@ -157,6 +167,12 @@ export function ProcessCard({
     keyOf(process.test_types.find((id) => id !== qualityId)),
     keyOf(qualityId),
   ].filter((k): k is NonNullable<typeof k> => k !== null);
+
+  // Overleveringen hører til det sidste trin, operatøren ejer. Hvilket det er,
+  // følger af processerne og ikke af et navn her: kommer der et femte trin,
+  // skal denne fil ikke røres. Et stemplet lot er forbi og kan ikke meldes
+  // færdigt igen.
+  const handover = lastOperatorStep === process.id && lot.stamp === null;
 
   return (
     <article
@@ -330,6 +346,35 @@ export function ProcessCard({
                 ? "Kvittér for resultat"
                 : `Kvittér for ${pending.length} resultater`}
             </button>
+          </div>
+        )}
+
+        {/* Operatørens sidste handling. Herfra er partiet laboratoriets, og
+            det flytter over i analysekøen på forsiden.
+
+            Kun på det sidste trin, hun ejer, og kun mens lottet stadig kører.
+            Er det først overleveret, er der ikke noget at trykke på: knappen
+            forsvinder frem for at blive grå, for en grå knap ser ud som noget,
+            der er i vejen. */}
+        {handover && (
+          <div className="process__handover">
+            {lot.ended_at ? (
+              <p className="process__handover-done">
+                <Icon name="circle-check" size={16} strokeWidth={2.2} />
+                Meldt færdig på linjen{" "}
+                {dateTime.format(new Date(lot.ended_at))}
+              </p>
+            ) : (
+              <button
+                type="button"
+                className="btn"
+                disabled={busy}
+                onClick={onHandover}
+              >
+                <Icon name="arrow-right" size={17} strokeWidth={2.2} />
+                Færdig på linjen
+              </button>
+            )}
           </div>
         )}
 
