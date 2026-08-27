@@ -401,6 +401,13 @@ class LotSample(BaseModel):
             "numrene fandtes."
         ),
     )
+    position: str | None = Field(
+        default=None,
+        description=(
+            "Hvor på trinnet prøven blev taget. Cleaning har to steder, S og "
+            "N. Tom på trin med ét sted, og på prøver fra før stederne fandtes."
+        ),
+    )
     acknowledged_at: datetime | None = None
     acknowledged_by: str | None = None
     metrics: dict[str, float] = {}
@@ -735,6 +742,14 @@ class NewSample(BaseModel):
         description=(
             "Operationsnummeret fra content/operations.yaml. Ukendte numre "
             "afvises frem for at blive gemt og aldrig talt med."
+        ),
+    )
+    position: str | None = Field(
+        default=None,
+        max_length=40,
+        description=(
+            "Hvor på trinnet prøven blev taget. Skal være et sted, trinnet "
+            "har, og skal være tom på trin uden steder."
         ),
     )
     taken_at: datetime | None = Field(

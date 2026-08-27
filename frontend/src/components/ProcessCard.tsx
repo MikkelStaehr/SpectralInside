@@ -13,6 +13,7 @@
  * Samme data, anden indramning, se StampArea nederst.
  */
 
+import { useMemo } from "react";
 import type {
   LotDetail,
   LotSample,
@@ -59,10 +60,16 @@ interface Props {
   /** Standardprocedurerne. Afgør hvornår et lot må stemples. */
   operations: Operation[];
   selected: TestTypeId;
+  /**
+   * Det valgte sted på trinnet. `null` betyder prøver uden sted, og
+   * `undefined` betyder et trin, der kun har ét.
+   */
+  position: string | null | undefined;
   /** Om det er dette kort, prøvehistorikken nedenunder viser. */
   active: boolean;
   thresholds: Thresholds;
   onSelect: (testType: TestTypeId) => void;
+  onSelectPosition: (position: string | null) => void;
   onAcknowledge: (sampleIds: number[]) => void;
   onStamp: (stamp: StampId) => void;
   /** Meld partiet færdigt på linjen. Flytter det over i laboratoriets kø. */
@@ -75,15 +82,19 @@ interface Props {
   busy: boolean;
 }
 
-/** Ukvitterede prøver i ét (proces, testtype). */
+/** Ukvitterede prøver i ét (proces, testtype), eventuelt på ét sted. */
 function unacknowledged(
   samples: LotSample[],
   process: string,
   testType: TestTypeId,
+  position?: string | null,
 ): LotSample[] {
-  return samplesIn(samples, process as Process["id"], testType).filter(
-    (s) => s.acknowledged_at === null,
-  );
+  return samplesIn(
+    samples,
+    process as Process["id"],
+    testType,
+    position,
+  ).filter((s) => s.acknowledged_at === null);
 }
 
 export function ProcessCard({
@@ -93,9 +104,11 @@ export function ProcessCard({
   testTypes,
   operations,
   selected,
+  position,
   active,
   thresholds,
   onSelect,
+  onSelectPosition,
   onAcknowledge,
   onStamp,
   onHandover,
@@ -109,10 +122,36 @@ export function ProcessCard({
     (t) => unacknowledged(lot.samples, process.id, t).length > 0,
   );
 
+  /**
+   * Stederne på trinnet, som fanerne skal vise.
+   *
+   * Til sidst et sted for prøver uden sted, hvis der er nogen. Det skal være
+   * der: prøver taget før stederne fandtes, ville ellers forsvinde bag
+   * fanerne, uden at nogen opdagede det. Båndet forsvinder af sig selv, når
+   * alle prøver bærer deres sted.
+   */
+  const places = useMemo(() => {
+    const declared = process.positions.map((p) => ({
+      id: p.id as string | null,
+      label: p.label,
+    }));
+    if (declared.length === 0) return declared;
+
+    const orphans = process.test_types.some((t) =>
+      samplesIn(lot.samples, process.id, t, null).length > 0,
+    );
+    return orphans
+      ? [...declared, { id: null, label: "Uden sted" }]
+      : declared;
+  }, [process, lot.samples]);
+
+  const placeLabel =
+    places.find((p) => p.id === position)?.label ?? process.label;
+
   const testType = testTypes[selected];
-  const scope = samplesIn(lot.samples, process.id, selected);
-  const latest = latestIn(lot.samples, process.id, selected);
-  const pending = unacknowledged(lot.samples, process.id, selected);
+  const scope = samplesIn(lot.samples, process.id, selected, position);
+  const latest = latestIn(lot.samples, process.id, selected, position);
+  const pending = unacknowledged(lot.samples, process.id, selected, position);
 
   // Ændringen måles mod den forrige prøve af samme slags **på lottet**, ikke
   // inden for trinnet.
@@ -158,7 +197,7 @@ export function ProcessCard({
   const qualityType = qualityId ? testTypes[qualityId] : undefined;
   const qualityGroup = qualityType?.groups.find((g) => g.scale === "ordinal");
   const qualityScope = qualityId
-    ? samplesIn(lot.samples, process.id, qualityId)
+    ? samplesIn(lot.samples, process.id, qualityId, position)
     : [];
   const qualitySample = qualityScope[qualityScope.length - 1];
 
@@ -171,7 +210,7 @@ export function ProcessCard({
   const keyOf = (id: TestTypeId | undefined) => {
     const type = id ? testTypes[id] : undefined;
     const metric = type?.metrics.find((m) => m.primary);
-    const sample = id ? latestIn(lot.samples, process.id, id) : null;
+    const sample = id ? latestIn(lot.samples, process.id, id, position) : null;
     if (!type || !metric || !sample) return null;
     return {
       type,
@@ -181,14 +220,19 @@ export function ProcessCard({
     };
   };
 
-  /** "mod Cleaning · CT #1 · 06.03". Staar som title paa pilen. */
+  /** "Målt mod Cleaning S · CT #1 · 06.03". Står som title på pilen. */
   const against = (from: LotSample | undefined) => {
     if (!from) return undefined;
     const step = processes.find((p) => p.id === from.process);
     const type = testTypes[from.test_type];
-    return `Målt mod ${step?.label ?? from.process} · ${
-      type?.label ?? from.test_type
-    } #${from.seq} · ${dateTime.format(new Date(from.taken_at))}`;
+    // Stedet med, hvor trinnet har flere. Uden det kan man ikke se, om et
+    // tal er målt mod S eller N, og på Cleaning er det to forskellige svar.
+    const place = step?.positions.find((x) => x.id === from.position);
+    return `Målt mod ${step?.label ?? from.process}${
+      place ? ` ${place.label}` : ""
+    } · ${type?.label ?? from.test_type} #${from.seq} · ${dateTime.format(
+      new Date(from.taken_at),
+    )}`;
   };
 
   const keys = [
@@ -285,53 +329,86 @@ export function ProcessCard({
         )}
       </div>
 
-      {/* Faner vises kun, hvor der er noget at vælge imellem, altså kun på
-          Post Cleaning. En fanerække med én fane er støj.
+      {/* Fanerne er **stederne** og ikke testtyperne.
 
-          De to andre kort viser i stedet testtypen som en stille etiket i det
-          samme bånd. Båndet skal alligevel være der, ellers ligger alt under
-          fanerne på Post Cleaning lavere end på de to andre, og så står de tre
-          tabeller i trappe. Et tomt bånd læses som en fejl, et bånd med navnet
-          i læses som en overskrift. */}
-      {process.test_types.length === 1 && (
-        <div className="process__tabs">
-          <span className="tab tab--static">
-            {testType?.label ?? selected}
-          </span>
-        </div>
-      )}
+          De to kontakter vejer ikke det samme. Stedet skifter hele
+          prøvestrømmen — S og N er to steder, materialet kan se forskelligt ud
+          — mens testtypen kun vælger, hvilken tabel der står nedenunder.
+          Nøgletallene øverst dækker begge testtyper i forvejen.
 
-      {process.test_types.length > 1 && (
+          Båndet er der altid, også hvor der kun er ét sted. Uden det ligger
+          alt under fanerne på Cleaning lavere end på de andre kort, og så står
+          tabellerne i trappe. Et tomt bånd læses som en fejl, et bånd med
+          trinnets eget navn i læses som en overskrift. */}
+      {places.length > 1 ? (
         <div
           className="process__tabs above-hit"
           role="tablist"
-          aria-label={process.label}
+          aria-label={`Sted på ${process.label}`}
         >
-          {process.test_types.map((id) => {
-            const dot = unacknowledged(lot.samples, process.id, id).length > 0;
+          {places.map((place) => {
+            const dot = process.test_types.some(
+              (t) =>
+                unacknowledged(lot.samples, process.id, t, place.id).length > 0,
+            );
             return (
               <button
-                key={id}
+                key={place.id ?? "ingen"}
                 type="button"
                 role="tab"
-                aria-selected={id === selected}
-                className={`tab${id === selected ? " tab--active" : ""}`}
-                onClick={() => onSelect(id)}
+                aria-selected={place.id === position}
+                className={`tab${place.id === position ? " tab--active" : ""}`}
+                onClick={() => onSelectPosition(place.id)}
               >
-                {testTypes[id]?.label ?? id}
+                {place.label}
                 {dot && <span className="dot" aria-label="Nyt resultat" />}
               </button>
             );
           })}
         </div>
+      ) : (
+        <div className="process__tabs">
+          <span className="tab tab--static">{process.label}</span>
+        </div>
       )}
 
       {!latest ? (
         <p className="process__empty">
-          Ingen {testType?.label ?? selected}-prøve på dette trin endnu.
+          Ingen {testType?.label ?? selected}-prøve
+          {places.length > 1 ? ` på ${placeLabel}` : " på dette trin"} endnu.
         </p>
       ) : (
         <>
+          {/* Testtypen vælger kun tabellen nedenunder, så den er en stille
+              kontakt og ikke en fanerække. Er der kun én, står den som en
+              etiket: der er ikke noget at vælge imellem. */}
+          {process.test_types.length > 1 ? (
+            <div className="process__which above-hit" role="tablist">
+              {process.test_types.map((id) => {
+                const dot =
+                  unacknowledged(lot.samples, process.id, id, position).length >
+                  0;
+                return (
+                  <button
+                    key={id}
+                    type="button"
+                    role="tab"
+                    aria-selected={id === selected}
+                    className={`which${id === selected ? " which--active" : ""}`}
+                    onClick={() => onSelect(id)}
+                  >
+                    {testTypes[id]?.label ?? id}
+                    {dot && <span className="dot" aria-label="Nyt resultat" />}
+                  </button>
+                );
+              })}
+            </div>
+          ) : (
+            <p className="process__which process__which--one">
+              {testType?.label ?? selected}
+            </p>
+          )}
+
           {rest.length > 0 && (
             <ul className="process__metrics">
               {rest.map((metric) => (

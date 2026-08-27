@@ -79,6 +79,23 @@ export function OperatorScreen({ lotNo, onBack, onOpenSample }: Props) {
   // klienttilstand og ikke adresse: en skærm, der står tændt i et døgn, skal
   // ikke efterlade en browserhistorik med 400 poster.
   const [tabs, setTabs] = useState<Record<string, TestTypeId>>({});
+
+  // Det valgte sted pr. trin. Klienttilstand som fanerne: en skærm, der står
+  // tændt i et døgn, skal ikke efterlade en browserhistorik med 400 poster.
+  const [places, setPlaces] = useState<Record<string, string | null>>({});
+
+  /**
+   * Stedet, kortet viser. Trin uden steder giver `undefined`, og så ser kortet
+   * alle prøver på trinnet — der er ikke noget at skille ad.
+   */
+  const positionOf = useCallback(
+    (process: { id: string; positions: { id: string }[] }) => {
+      if (process.positions.length === 0) return undefined;
+      const chosen = places[process.id];
+      return chosen === undefined ? process.positions[0].id : chosen;
+    },
+    [places],
+  );
   const [scope, setScope] = useState<Scope | null>(null);
 
   const lotRef = useRef(lotNo);
@@ -366,6 +383,10 @@ export function OperatorScreen({ lotNo, onBack, onOpenSample }: Props) {
                     // skifter prøvehistorikken nedenunder til den. De to
                     // kunne skilles ad, men så ville et klik på "Cleaning"
                     // ikke vise Cleaning-prøverne, og det er det, man mener.
+                    position={positionOf(process)}
+                    onSelectPosition={(place) =>
+                      setPlaces((current) => ({ ...current, [process.id]: place }))
+                    }
                     onSelect={(testType) => {
                       setTabs((current) => ({ ...current, [process.id]: testType }));
                       setScope({ process: process.id, testType });

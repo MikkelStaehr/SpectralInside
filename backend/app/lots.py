@@ -88,6 +88,22 @@ class TestType(BaseModel):
     groups: list[MetricGroup] = []
 
 
+class Position(BaseModel):
+    """Et sted på trinnet, hvor der tages prøver.
+
+    Cleaning har to. Det er ikke to målinger af det samme — det er to steder,
+    materialet kan se forskelligt ud, og en prøve, der ikke bærer hvor den kom
+    fra, kan ikke bruges til at afgøre hvilket af dem, der driver.
+
+    Trin uden positioner har én prøvestrøm, og så er der ikke noget at vælge
+    imellem. Listen er tom, og skærmen viser ingen faner.
+    """
+
+    id: str
+    label: str
+    lead: str | None = None
+
+
 class Process(BaseModel):
     id: ProcessId
     step: int
@@ -99,6 +115,14 @@ class Process(BaseModel):
             "Processen afsluttes med et kvalitetsstempel frem for med endnu en "
             "justering. Kun Post Cleaning. Skærmen bruger det til ikke at "
             "invitere til at prøve igen dér, hvor der ikke er noget at skrue på."
+        ),
+    )
+    positions: list[Position] = Field(
+        default_factory=list,
+        description=(
+            "Steder på trinnet, hvor der tages prøver. Tom betyder ét sted, "
+            "og så er der ingen faner at vælge imellem. Er der positioner, "
+            "hører hver prøve til præcis én af dem."
         ),
     )
     owner: Literal["operator", "analyst"] = Field(
@@ -268,8 +292,19 @@ PROCESSES: list[Process] = [
     Process(
         id="pre_cleaning", step=1, label="Pre Cleaning", test_types=["purity", "ct"]
     ),
+    # To steder tages der prøver på Cleaning. Det er ikke to målinger af det
+    # samme: materialet kan se forskelligt ud de to steder, og en prøve, der
+    # ikke bærer hvor den kom fra, kan ikke afgøre hvilket af dem, der driver.
+    #
+    # ADVARSEL: S og N er skrevet af, som de blev sagt. Hvad de står for, ved
+    # jeg ikke, og etiketterne herunder er derfor bogstaverne selv. Skriv de
+    # rigtige navne, hvis de hedder noget — det er to linjer.
     Process(
-        id="cleaning", step=2, label="Cleaning", test_types=["cleaning_damage", "ct"]
+        id="cleaning",
+        step=2,
+        label="Cleaning",
+        test_types=["cleaning_damage", "ct"],
+        positions=[Position(id="s", label="S"), Position(id="n", label="N")],
     ),
     # Operatørens sidste trin. Herfra og frem er der ikke mere at skrue på.
     #
@@ -401,6 +436,22 @@ def is_valid_scope(process_id: str, test_type_id: str) -> bool:
     anden er den, der stadig gælder, hvis nogen skriver udenom API'et.
     """
     return test_type_id in test_types_for(process_id)
+
+
+def positions_for(process_id: str) -> list[Position]:
+    process = PROCESS_BY_ID.get(process_id)
+    return list(process.positions) if process else []
+
+
+def is_valid_position(process_id: str, position: str | None) -> bool:
+    """Om prøven hører til et sted, der findes på trinnet.
+
+    Et trin uden positioner tager kun prøver uden position, og et trin med
+    positioner tager kun prøver med. Blandes de to, ville halvdelen af
+    prøverne stå uden for fanerne uden at nogen så det.
+    """
+    known = {p.id for p in positions_for(process_id)}
+    return position in known if known else position is None
 
 
 def metrics_for(test_type_id: str) -> list[Metric]:

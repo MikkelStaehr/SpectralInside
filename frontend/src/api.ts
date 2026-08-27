@@ -187,6 +187,8 @@ export const api = {
       scan_id?: string | null;
       /** Standardproceduren, proeven blev taget efter. Se operations.yaml. */
       operation?: string | null;
+      /** Hvor paa trinnet proeven blev taget. Kun paa trin med flere steder. */
+      position?: string | null;
     },
   ) =>
     request<LotSample>(`/lots/${encodeURIComponent(lotNo)}/samples`, {

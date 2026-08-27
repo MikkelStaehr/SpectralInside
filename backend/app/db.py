@@ -321,8 +321,22 @@ ALTER TABLE lot_samples ADD CONSTRAINT lot_samples_scope CHECK (
 -- ikke har et, og en tvungen kolonne ville kraeve at nogen gaettede bagud.
 ALTER TABLE lot_samples ADD COLUMN IF NOT EXISTS operation TEXT;
 
+-- Hvor paa trinnet proeven blev taget. Cleaning har to steder, S og N, og en
+-- proeve, der ikke baerer hvor den kom fra, kan ikke afgoere hvilket af dem,
+-- der driver. Nullable, fordi de fleste trin kun har ét sted.
+ALTER TABLE lot_samples ADD COLUMN IF NOT EXISTS position TEXT;
+
+-- Loebenummeret taelles pr. sted. To proever fra hver sit sted er ikke #1 og
+-- #2 af det samme, de er #1 begge to. Uden position i noeglen ville S og N
+-- dele taeller, og "proeve #3 af 4" paa S ville vaere loegn.
+--
+-- COALESCE, fordi et unikt indeks i Postgres ikke fanger dubletter, naar en
+-- af kolonnerne er NULL: to proever uden position ville begge kunne faa seq 1.
+-- Det gamle indeks uden position afloeses.
+DROP INDEX IF EXISTS idx_lot_samples_seq;
+
 CREATE UNIQUE INDEX IF NOT EXISTS idx_lot_samples_seq
-    ON lot_samples (lot_no, process, test_type, seq);
+    ON lot_samples (lot_no, process, test_type, (COALESCE(position, '')), seq);
 
 -- Stemplet spoerger "har lottet et resultat for operation 48". Uden indeks er
 -- det en scanning af alle proever paa lottet, hver gang kortet tegnes.
@@ -1252,6 +1266,7 @@ def add_sample(
     scan_id: str | None,
     taken_at: datetime | None = None,
     operation: str | None = None,
+    position: str | None = None,
 ) -> Row:
     """Registrér én prøve med sine metrikker, i én transaktion.
 
@@ -1265,8 +1280,9 @@ def add_sample(
         conn.execute("SELECT 1 FROM lots WHERE lot_no = %s FOR UPDATE", (lot_no,))
         row = conn.execute(
             "SELECT COALESCE(MAX(seq), 0) + 1 AS seq FROM lot_samples "
-            "WHERE lot_no = %s AND process = %s AND test_type = %s",
-            (lot_no, process, test_type),
+            "WHERE lot_no = %s AND process = %s AND test_type = %s "
+            "AND COALESCE(position, '') = COALESCE(%s, '')",
+            (lot_no, process, test_type, position),
         ).fetchone()
         seq = row["seq"]
 
@@ -1274,8 +1290,8 @@ def add_sample(
             """
             INSERT INTO lot_samples
                 (lot_no, process, test_type, seq, taken_at, taken_by,
-                 adjustment, scan_id, operation)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                 adjustment, scan_id, operation, position)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING *
             """,
             (
@@ -1288,6 +1304,7 @@ def add_sample(
                 (adjustment or "").strip() or None,
                 (scan_id or "").strip() or None,
                 (operation or "").strip() or None,
+                (position or "").strip() or None,
             ),
         ).fetchone()
 

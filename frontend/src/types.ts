@@ -277,11 +277,26 @@ export interface TestType {
   groups: MetricGroup[];
 }
 
+/**
+ * Et sted paa trinnet, hvor der tages proever.
+ *
+ * Cleaning har to. Det er ikke to maalinger af det samme — det er to steder,
+ * materialet kan se forskelligt ud, og en proeve, der ikke baerer hvor den kom
+ * fra, kan ikke afgoere hvilket af dem, der driver.
+ */
+export interface Position {
+  id: string;
+  label: string;
+  lead: string | null;
+}
+
 export interface Process {
   id: ProcessId;
   step: number;
   label: string;
   test_types: TestTypeId[];
+  /** Steder paa trinnet. Tom betyder ét sted, og saa er der ingen faner. */
+  positions: Position[];
   stamp: boolean;
   /**
    * Hvis trin det er. Operatoeren staar ved linjen og kan skrue paa noget;
@@ -455,6 +470,8 @@ export interface LotSample {
    * Tom paa proever fra foer numrene fandtes.
    */
   operation: string | null;
+  /** Hvor paa trinnet proeven blev taget. Tom paa trin med ét sted. */
+  position: string | null;
   acknowledged_at: string | null;
   acknowledged_by: string | null;
   metrics: Record<string, number>;

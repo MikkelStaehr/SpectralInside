@@ -751,6 +751,7 @@ def _to_lot_sample(row) -> LotSample:
         adjustment=row["adjustment"],
         scan_id=row["scan_id"],
         operation=row.get("operation"),
+        position=row.get("position"),
         acknowledged_at=row["acknowledged_at"],
         acknowledged_by=row["acknowledged_by"],
         metrics={name: float(value) for name, value in metrics.items()},
@@ -1370,6 +1371,23 @@ def create_sample(lot_no: str, sample: NewSample) -> LotSample:
             ),
         )
 
+    # Stedet skal findes paa trinnet. Et trin med to steder tager ikke proever
+    # uden sted: den ville staa uden for fanerne, og ingen ville se den.
+    if not lots.is_valid_position(sample.process, sample.position):
+        places = lots.positions_for(sample.process)
+        if places:
+            allowed = ", ".join(f"{p.id} ({p.label})" for p in places)
+            detail = (
+                f"{lots.PROCESS_BY_ID[sample.process].label} tager prøver to "
+                f"steder. Angiv hvilket: {allowed}"
+            )
+        else:
+            detail = (
+                f"{lots.PROCESS_BY_ID[sample.process].label} har kun ét sted, "
+                "så prøven skal ikke have et."
+            )
+        raise HTTPException(status_code=422, detail=detail)
+
     known = lots.metric_ids(sample.test_type)
     unknown = sorted(set(sample.metrics) - known)
     if unknown:
@@ -1427,6 +1445,7 @@ def create_sample(lot_no: str, sample: NewSample) -> LotSample:
         scan_id=sample.scan_id,
         taken_at=sample.taken_at,
         operation=sample.operation,
+        position=sample.position,
     )
     return _to_lot_sample({**row, "metrics": sample.metrics})
 

@@ -1719,6 +1719,20 @@ p:last-child {
   margin-top: 3px;
 }
 
+/* Navisions status paa en koeordre. Staar kun, naar den ikke er Released, og
+   staar roligt: det er en oplysning om, at ordren ikke er klar, ikke en fejl. */
+.track__status {
+  flex: none;
+  padding: 3px 9px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
 /* Koeens nummer og ikke ordrens. Det siger, hvad der koerer som det naeste,
    og det er det, der spoerges om. */
 .track__pos {

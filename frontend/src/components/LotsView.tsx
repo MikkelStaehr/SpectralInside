@@ -171,11 +171,26 @@ function SampleForm({
   const [adjustment, setAdjustment] = useState("");
   const [scanId, setScanId] = useState("");
   const [operation, setOperation] = useState("");
+
+  // Stedet på trinnet. Trin med flere steder tager ikke prøver uden et, så
+  // feltet står som det første og med det første sted valgt: en tom rulleliste
+  // ville give en afvisning, man først opdager ved indsendelse.
+  const [position, setPosition] = useState<string>("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<string | null>(null);
 
   const current = meta.processes.find((p) => p.id === process) ?? meta.processes[0];
+
+  // Skifter man trin, kan det valgte sted være et, der ikke findes dér.
+  useEffect(() => {
+    const known = current.positions.map((p) => p.id);
+    if (known.length === 0) {
+      if (position !== "") setPosition("");
+    } else if (!known.includes(position)) {
+      setPosition(known[0]);
+    }
+  }, [current, position]);
 
   // Testtypen følger processen. Skifter man proces, kan den valgte testtype
   // være en, der ikke findes dér, og så skal den nulstilles frem for at give
@@ -208,7 +223,13 @@ function SampleForm({
     [meta, testType],
   );
 
-  const nextSeq = samplesIn(lot.samples, process, testType).length + 1;
+  const nextSeq =
+    samplesIn(
+      lot.samples,
+      process,
+      testType,
+      current.positions.length > 0 ? position : undefined,
+    ).length + 1;
   // Alle metrikker skal udfyldes. En tom værdi ville stå som en tom celle på
   // operatørskærmen, uden at nogen kunne se, om den var glemt eller målt til
   // nul. Backenden afviser den samme ting.
@@ -241,6 +262,7 @@ function SampleForm({
         adjustment: adjustment.trim() || null,
         scan_id: scanId || null,
         operation: operation || null,
+        position: position || null,
       });
 
       setValues({});
@@ -335,6 +357,23 @@ function SampleForm({
           placeholder="Slibetryk 3,2 → 2,8 bar"
         />
       </label>
+
+      {/* Stedet på trinnet. Cleaning har to, og en prøve, der ikke bærer hvor
+          den kom fra, kan ikke afgøre hvilket af dem, der driver. */}
+      {current.positions.length > 0 && (
+        <label className="field">
+          <span>
+            Sted <em>hvor på trinnet prøven blev taget</em>
+          </span>
+          <select value={position} onChange={(e) => setPosition(e.target.value)}>
+            {current.positions.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.label}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
 
       {/* Operationsnummeret er standardproceduren, prøven blev taget efter.
           Kun de operationer, der giver den her slags måling, kan vælges: et

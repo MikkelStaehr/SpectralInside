@@ -292,6 +292,17 @@ export function Board({ lines, lots, orders, onOpen, onStart }: Props) {
                               Det store tal på kørslerne ovenfor er prøver, der
                               faktisk er taget; et planlagt tal er kontorets
                               forventning, og de to må ikke veje ens. */}
+                          {/* Navisions status. Vises kun, naar den ikke er
+                              Released: en frigivet ordre er det normale, og at
+                              skrive det paa dem alle ville goere etiketten til
+                              baggrundsstoej. Er den noget andet, skal det
+                              staa, foer nogen saetter den i gang. */}
+                          {order.source_status &&
+                            order.source_status.toLowerCase() !== "released" && (
+                              <span className="track__status">
+                                {order.source_status}
+                              </span>
+                            )}
                           <span className="track__meta">
                             {order.variety ? `${order.variety} · ` : ""}
                             {order.order_no}

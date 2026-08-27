@@ -28,13 +28,26 @@ export interface Thresholds {
 }
 
 /** Prøverne i ét (proces, testtype), i den rækkefølge de blev taget. */
+/**
+ * Proeverne i ét (proces, testtype), eventuelt paa ét sted.
+ *
+ * `position` er `undefined` paa trin med ét sted. Er den sat, er det et af
+ * trinnets steder — eller `null`, som betyder de proever, der blev taget foer
+ * stederne fandtes. De skal stadig kunne ses.
+ */
 export function samplesIn(
   samples: LotSample[],
   process: ProcessId,
   testType: TestTypeId,
+  position?: string | null,
 ): LotSample[] {
   return samples
-    .filter((s) => s.process === process && s.test_type === testType)
+    .filter(
+      (s) =>
+        s.process === process &&
+        s.test_type === testType &&
+        (position === undefined || (s.position ?? null) === position),
+    )
     .sort((a, b) => a.seq - b.seq);
 }
 
@@ -42,8 +55,9 @@ export function latestIn(
   samples: LotSample[],
   process: ProcessId,
   testType: TestTypeId,
+  position?: string | null,
 ): LotSample | null {
-  const scope = samplesIn(samples, process, testType);
+  const scope = samplesIn(samples, process, testType, position);
   return scope.length ? scope[scope.length - 1] : null;
 }
 
